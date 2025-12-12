@@ -1,0 +1,4 @@
+# Dependências do projeto Virtus
+# Python 3.11.x obrigatório (compatibilidade MT5)
+
+# Adicionar dependências conforme necessário
