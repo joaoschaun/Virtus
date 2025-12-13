@@ -1,0 +1,135 @@
+# ============================================================
+# 💷 GBP BOT - Bot para GBPUSD
+# ============================================================
+
+bot:
+  id: "gbp"
+  name: "BRAIN GBP Bot"
+  symbol: "GBPUSD"
+  enabled: true
+  description: "Bot especializado em Libra - Breakout Trading"
+
+# Estratégias habilitadas
+strategies:
+  enabled:
+    - "breakout"
+  
+  # Configuração de Breakout
+  breakout:
+    enabled: true
+    weight: 1.0
+    
+    # Detecção de Consolidação
+    consolidation:
+      min_bars: 15
+      max_range_pips: 40
+      volume_contraction: true
+      
+    # Breakout
+    entry:
+      confirmation_bars: 2
+      min_momentum: 0.5
+      volume_expansion_ratio: 1.5
+      retest_entry: true
+      
+    # Filtros
+    filters:
+      avoid_false_breakouts: true
+      news_filter: true
+      session_filter: true
+      
+    targets:
+      take_profit_pips: 40
+      stop_loss_pips: 20
+      risk_reward_min: 2.0
+
+# Gestão de Risco do Bot
+risk:
+  max_positions: 1
+  max_risk_per_trade: 0.02  # 2%
+  max_daily_loss_usd: 180.0
+  max_daily_trades: 5
+  
+  correlation:
+    avoid_if_correlated_with: ["EURUSD", "EURGBP"]
+    correlation_threshold: 0.7
+
+# Gestão de Posições
+positions:
+  trailing_stop:
+    enabled: true
+    activation_pips: 25
+    trail_pips: 12
+    
+  breakeven:
+    enabled: true
+    activation_pips: 15
+    lock_pips: 3
+    
+  partial_close:
+    enabled: true
+    levels:
+      - pips: 30
+        close_percent: 40
+      - pips: 50
+        close_percent: 30
+
+# Machine Learning
+ml:
+  enabled: true
+  models:
+    - "lstm"
+  min_confidence: 0.6
+  weight_in_decision: 0.2
+
+# Análise Técnica
+analysis:
+  timeframes:
+    - "M15"   # Principal para breakout
+    - "H1"
+    - "H4"
+    
+  smart_money:
+    enabled: true
+    order_blocks: true
+    liquidity_zones: true
+    fair_value_gaps: true
+    
+  manipulation_filter:
+    enabled: true
+    spike_threshold_pips: 4
+    recovery_time_seconds: 25
+    
+  volume_profile:
+    enabled: true
+
+# Integração com Brain
+brain:
+  use_cache: true
+  priority: "normal"
+  
+  data_sources:
+    - "news"
+    - "sentiment"
+    - "calendar"
+    - "macro"
+
+# Horários de operação
+schedule:
+  preferred_hours:
+    - start: "03:00"
+      end: "05:00"
+      timezone: "America/New_York"
+      weight: 1.4  # London open - melhor para breakouts
+    - start: "08:00"
+      end: "10:00"
+      timezone: "America/New_York"
+      weight: 1.3  # NY open
+      
+  avoid:
+    - day: "friday"
+      after: "17:00"
+      reason: "Fim de semana"
+    - event: "BOE"
+      buffer_minutes: 30
+      reason: "Decisão do BOE"

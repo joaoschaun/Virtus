@@ -1,0 +1,168 @@
+# ============================================================
+# 🥇 GOLD BOT - Bot para XAUUSD
+# ============================================================
+
+bot:
+  id: "gold"
+  name: "BRAIN Gold Bot"
+  symbol: "XAUUSD"
+  enabled: true
+  description: "Bot especializado em ouro - Scalping e Trend Following"
+
+# Estratégias habilitadas
+strategies:
+  enabled:
+    - "scalping"
+    - "trend_following"
+  
+  # Configuração de Scalping
+  scalping:
+    enabled: true
+    weight: 0.6  # 60% do peso nas decisões
+    
+    # Condições de entrada
+    entry:
+      max_spread_pips: 2.5
+      min_volatility_atr: 0.5
+      max_volatility_atr: 3.0
+      
+    # RSI
+    rsi:
+      period: 14
+      oversold: 30
+      overbought: 70
+      
+    # Bollinger Bands
+    bollinger:
+      period: 20
+      std_dev: 2.0
+      
+    # Targets
+    targets:
+      take_profit_pips: 15
+      stop_loss_pips: 10
+      risk_reward_min: 1.5
+  
+  # Configuração de Trend Following
+  trend_following:
+    enabled: true
+    weight: 0.4  # 40% do peso nas decisões
+    
+    # EMAs
+    ema:
+      fast: 9
+      medium: 21
+      slow: 50
+      
+    # ADX
+    adx:
+      period: 14
+      min_strength: 25
+      
+    # Targets
+    targets:
+      take_profit_pips: 50
+      stop_loss_pips: 25
+      risk_reward_min: 2.0
+
+# Gestão de Risco do Bot
+risk:
+  max_positions: 2
+  max_risk_per_trade: 0.02  # 2% do capital
+  max_daily_loss_usd: 200.0
+  max_daily_trades: 10
+  
+  # Correlação com outros ativos
+  correlation:
+    avoid_if_correlated_with: ["XAGUSD"]
+    correlation_threshold: 0.8
+
+# Gestão de Posições
+positions:
+  # Trailing Stop
+  trailing_stop:
+    enabled: true
+    activation_pips: 15
+    trail_pips: 8
+    
+  # Breakeven
+  breakeven:
+    enabled: true
+    activation_pips: 10
+    lock_pips: 2
+    
+  # Fechamento Parcial
+  partial_close:
+    enabled: true
+    levels:
+      - pips: 20
+        close_percent: 50
+      - pips: 35
+        close_percent: 30
+
+# Machine Learning
+ml:
+  enabled: true
+  models:
+    - "lstm"
+    - "ensemble"
+  min_confidence: 0.6
+  weight_in_decision: 0.3  # 30% do peso final
+
+# Análise Técnica
+analysis:
+  # Multi-timeframe
+  timeframes:
+    - "M5"    # Principal
+    - "M15"   # Confirmação
+    - "H1"    # Tendência
+    
+  # Smart Money Concepts
+  smart_money:
+    enabled: true
+    order_blocks: true
+    liquidity_zones: true
+    fair_value_gaps: true
+    
+  # Filtro de Manipulação
+  manipulation_filter:
+    enabled: true
+    spike_threshold_pips: 5
+    recovery_time_seconds: 30
+    
+  # Volume Profile
+  volume_profile:
+    enabled: true
+    poc_distance_filter: true
+
+# Integração com Brain
+brain:
+  use_cache: true
+  priority: "high"  # Mais budget alocado
+  
+  # Dados que o bot consulta do Brain
+  data_sources:
+    - "news"
+    - "sentiment"
+    - "calendar"
+    - "cot"
+    - "macro"
+
+# Horários de operação específicos
+schedule:
+  # Horários preferidos para Gold
+  preferred_hours:
+    - start: "08:00"
+      end: "12:00"
+      timezone: "America/New_York"
+      weight: 1.2  # Boost de 20%
+    - start: "13:00"
+      end: "17:00"
+      timezone: "America/New_York"
+      weight: 1.0
+      
+  # Evitar operação em
+  avoid:
+    - day: "friday"
+      after: "20:00"
+      reason: "Fim de semana próximo"

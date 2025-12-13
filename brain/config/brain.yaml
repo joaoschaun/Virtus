@@ -1,0 +1,130 @@
+# ============================================================
+# 🧠 BRAIN SERVICE - Configuração do Serviço Central
+# ============================================================
+
+# Cache compartilhado
+cache:
+  # Backend: redis | memory
+  backend: "memory"
+  
+  # TTL (Time To Live) em segundos
+  ttl:
+    news: 900           # 15 minutos
+    sentiment: 600      # 10 minutos
+    calendar: 3600      # 1 hora
+    cot: 86400          # 1 dia
+    macro: 3600         # 1 hora
+    technical: 60       # 1 minuto
+    
+  # Tamanho máximo do cache em memória (itens)
+  max_size: 1000
+
+# Budget de APIs (controle de gastos)
+budget:
+  # ForexNews API
+  forexnews:
+    monthly_limit: 5000
+    daily_limit: 166
+    requests_per_minute: 10
+    priority: "high"
+  
+  # Finnhub API
+  finnhub:
+    monthly_limit: 1000
+    daily_limit: 33
+    requests_per_minute: 30
+    priority: "medium"
+  
+  # COT Reports
+  cot:
+    weekly_limit: 50
+    daily_limit: 7
+    priority: "low"
+  
+  # Economic Calendar (gratuito)
+  calendar:
+    daily_limit: 100
+    requests_per_minute: 10
+    priority: "high"
+
+# Providers de dados
+providers:
+  forexnews:
+    enabled: true
+    api_key: null  # Definir via variável de ambiente FOREXNEWS_API_KEY
+    base_url: "https://api.forexnewsapi.com"
+    
+  finnhub:
+    enabled: true
+    api_key: null  # Definir via variável de ambiente FINNHUB_API_KEY
+    base_url: "https://finnhub.io/api/v1"
+    
+  cot:
+    enabled: true
+    source: "cftc"
+    base_url: "https://www.cftc.gov/dea/futures"
+    
+  calendar:
+    enabled: true
+    source: "investing"
+    
+  translation:
+    enabled: true
+    provider: "google"  # google | deepl
+    target_language: "pt"
+
+# Analyzers
+analyzers:
+  news:
+    enabled: true
+    min_relevance_score: 0.5
+    max_age_hours: 24
+    
+  sentiment:
+    enabled: true
+    model: "finbert"  # finbert | vader | combined
+    
+  macro:
+    enabled: true
+    indicators:
+      - "DXY"      # Dollar Index
+      - "VIX"      # Volatility Index
+      - "US10Y"    # Treasury 10Y
+      - "SPX"      # S&P 500
+      
+  correlation:
+    enabled: true
+    lookback_periods: 50
+    update_interval: 3600  # 1 hora
+
+# Símbolos suportados e suas configurações
+symbols:
+  XAUUSD:
+    name: "Gold"
+    type: "commodity"
+    pip_value: 0.01
+    related_currencies: ["USD"]
+    cot_code: "088691"
+    news_keywords: ["gold", "ouro", "xau", "precious metals"]
+    
+  EURUSD:
+    name: "Euro/Dollar"
+    type: "forex"
+    pip_value: 0.0001
+    related_currencies: ["EUR", "USD"]
+    cot_code: "099741"
+    news_keywords: ["euro", "eur", "ecb", "european"]
+    
+  GBPUSD:
+    name: "Pound/Dollar"
+    type: "forex"
+    pip_value: 0.0001
+    related_currencies: ["GBP", "USD"]
+    cot_code: "096742"
+    news_keywords: ["pound", "gbp", "sterling", "boe", "british"]
+
+# Alocação de prioridade para budget
+priority_allocation:
+  high: 0.5     # 50% do budget
+  normal: 0.35  # 35% do budget
+  low: 0.15     # 15% do budget
