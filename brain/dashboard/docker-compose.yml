@@ -1,0 +1,76 @@
+# VIRTUS Dashboard - Docker Compose
+# ==================================
+# Integrado com sistema VIRTUS existente (SQLite + Memory Cache)
+# Deploy: virtusinvestimentos.com.br
+
+version: '3.8'
+
+services:
+  # Backend FastAPI - Integrado com VIRTUS
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: virtus-backend
+    restart: always
+    ports:
+      - "8000:8000"
+    environment:
+      - VIRTUS_SECRET_KEY=${VIRTUS_SECRET_KEY:-your-secret-key-change-in-production}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+    volumes:
+      # Monta diretório data para acessar SQLite existente
+      - ../data:/app/data:rw
+      # Monta diretório config para acessar configs VIRTUS
+      - ../config:/app/config:ro
+      # Monta src para integração com módulos VIRTUS
+      - ../src:/app/src:ro
+      # Logs
+      - ./logs:/app/logs
+    networks:
+      - virtus-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Frontend React
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        - VITE_API_URL=/api
+    container_name: virtus-frontend
+    restart: always
+    networks:
+      - virtus-network
+
+  # Nginx Reverse Proxy + SSL via Cloudflare
+  nginx:
+    image: nginx:alpine
+    container_name: virtus-nginx
+    restart: always
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - backend
+      - frontend
+    networks:
+      - virtus-network
+    healthcheck:
+      test: ["CMD", "nginx", "-t"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+
+networks:
+  virtus-network:
+    driver: bridge
+
+# Nota: Não usa Redis - sistema VIRTUS usa cache em memória
+# Nota: Não usa volume externo para DB - usa SQLite em ../data/brain/virtus.db

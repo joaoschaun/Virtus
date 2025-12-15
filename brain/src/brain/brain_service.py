@@ -1,448 +1,642 @@
 """
-🧠 BRAIN SERVICE
-Serviço central de dados e análises - Singleton compartilhado por todos os bots
+VIRTUS Brain - Brain Service
+=============================
+
+Serviço central do Brain - orquestra providers, cache e budget.
+Singleton que fornece dados unificados para todos os bots.
 """
 
 import asyncio
 from datetime import datetime, timedelta
-from typing import Any, Dict, List, Optional
-from dataclasses import dataclass
+from typing import Dict, List, Any, Optional
+from pathlib import Path
 
-from ..core.config import Config
 from ..core.logger import get_logger
+from ..core.config import Config, get_config
 from ..core.types import (
-    NewsItem, SentimentData, CalendarEvent, COTData,
-    SentimentLevel, NewsImpact
+    NewsItem, MarketSentiment, EconomicEvent,
+    SentimentLevel, NewsImpact, DailyBriefing
 )
-from ..core.exceptions import BrainError, BudgetExceededError
-
-from .cache.memory_cache import MemoryCache
-from .budget.budget_manager import BudgetManager
-from .providers.forexnews_provider import ForexNewsProvider
-from .providers.finnhub_provider import FinnhubProvider
-from .providers.cot_provider import COTProvider
-from .providers.calendar_provider import CalendarProvider
-from .analyzers.news_analyzer import NewsAnalyzer
-from .analyzers.sentiment_analyzer import SentimentAnalyzer
-from .analyzers.macro_analyzer import MacroAnalyzer
+from ..core.exceptions import (
+    BrainError, ProviderUnavailableError, NoDataError
+)
+from .cache import CacheManager, get_cache_manager
+from .budget import BudgetManager, get_budget_manager
+from .providers import (
+    ForexNewsProvider,
+    FinnhubProvider,
+    TwelveDataProvider,
+    FMPProvider,
+    CFTCProvider
+)
 
 logger = get_logger("brain")
 
 
-@dataclass
-class BrainStatus:
-    """Status do Brain Service"""
-    running: bool
-    cache_status: Dict[str, Any]
-    budget_status: Dict[str, Any]
-    providers_status: Dict[str, bool]
-    last_update: datetime
-
-
 class BrainService:
     """
-    🧠 BRAIN - Serviço Central de Dados
+    Serviço central do Brain.
     
-    Singleton que gerencia:
-    - Cache compartilhado (evita chamadas duplicadas de API)
-    - Budget de APIs (controle de gastos)
-    - Providers de dados (notícias, calendário, COT, etc.)
-    - Analyzers (sentimento, macro, etc.)
+    Responsabilidades:
+    - Gerenciar providers de dados
+    - Agregar dados de múltiplas fontes
+    - Coordenar cache e budget
+    - Fornecer dados unificados para bots
     
-    Todos os bots consultam o Brain para obter dados de mercado.
+    Uso:
+        brain = await BrainService.get_instance()
+        news = await brain.get_news(['XAUUSD'])
+        sentiment = await brain.get_sentiment('XAUUSD')
     """
     
-    _instance: Optional["BrainService"] = None
-    
-    def __new__(cls):
-        if cls._instance is None:
-            cls._instance = super().__new__(cls)
-            cls._instance._initialized = False
-        return cls._instance
+    _instance: Optional['BrainService'] = None
+    _lock = asyncio.Lock()
     
     def __init__(self):
+        self.config: Optional[Config] = None
+        self.cache_manager: Optional[CacheManager] = None
+        self.budget_manager: Optional[BudgetManager] = None
+        
+        # Providers
+        self._forexnews: Optional[ForexNewsProvider] = None
+        self._finnhub: Optional[FinnhubProvider] = None
+        self._twelvedata: Optional[TwelveDataProvider] = None
+        self._fmp: Optional[FMPProvider] = None
+        self._cftc: Optional[CFTCProvider] = None
+        
+        # Status
+        self._initialized = False
+        self._provider_status: Dict[str, bool] = {}
+    
+    @classmethod
+    async def get_instance(cls) -> 'BrainService':
+        """Retorna instância singleton do Brain"""
+        async with cls._lock:
+            if cls._instance is None:
+                cls._instance = cls()
+                await cls._instance.initialize()
+            return cls._instance
+    
+    async def initialize(self):
+        """Inicializa o Brain Service"""
         if self._initialized:
             return
         
-        self._initialized = True
-        self._running = False
+        logger.info("🧠 Inicializando Brain Service...")
         
-        # Configuração
-        self._config = Config()
-        self._brain_config = self._config.brain
-        
-        # Cache
-        self._cache = MemoryCache(
-            max_size=self._brain_config.cache.get("max_size", 1000)
-        )
-        
-        # Budget Manager
-        self._budget = BudgetManager(self._brain_config.budget)
-        
-        # Providers
-        self._providers = {}
-        self._init_providers()
-        
-        # Analyzers
-        self._analyzers = {}
-        self._init_analyzers()
-        
-        logger.info("🧠 Brain Service inicializado")
+        try:
+            # Carrega configuração
+            self.config = get_config()
+            
+            # Inicializa cache e budget
+            data_dir = Path(self.config.data_dir) / "brain"
+            self.cache_manager = get_cache_manager(data_dir / "cache")
+            self.budget_manager = get_budget_manager(data_dir)
+            
+            # Configura callbacks de alerta de budget
+            self.budget_manager.add_alert_callback(self._on_budget_alert)
+            
+            # Inicializa providers
+            await self._initialize_providers()
+            
+            # Verifica saúde dos providers
+            await self._check_providers_health()
+            
+            self._initialized = True
+            logger.info("✅ Brain Service inicializado com sucesso")
+            
+        except Exception as e:
+            logger.error(f"❌ Erro ao inicializar Brain: {e}")
+            raise BrainError(f"Falha na inicialização: {e}")
     
-    def _init_providers(self):
-        """Inicializa os providers de dados"""
-        providers_config = self._brain_config.providers
+    async def _initialize_providers(self):
+        """Inicializa todos os providers"""
+        api_keys = self.config.api_keys
         
-        if providers_config.get("forexnews", {}).get("enabled", False):
-            self._providers["forexnews"] = ForexNewsProvider(
-                providers_config.get("forexnews", {})
+        # ForexNews (principal para notícias)
+        if api_keys.forexnews:
+            self._forexnews = ForexNewsProvider(
+                api_key=api_keys.forexnews,
+                cache_manager=self.cache_manager,
+                budget_manager=self.budget_manager
             )
+            logger.debug("Provider ForexNews inicializado")
         
-        if providers_config.get("finnhub", {}).get("enabled", False):
-            self._providers["finnhub"] = FinnhubProvider(
-                providers_config.get("finnhub", {})
+        # Finnhub (calendário e backup de notícias)
+        if api_keys.finnhub:
+            self._finnhub = FinnhubProvider(
+                api_key=api_keys.finnhub,
+                cache_manager=self.cache_manager,
+                budget_manager=self.budget_manager
             )
+            logger.debug("Provider Finnhub inicializado")
         
-        if providers_config.get("cot", {}).get("enabled", False):
-            self._providers["cot"] = COTProvider(
-                providers_config.get("cot", {})
+        # TwelveData (indicadores técnicos e preços)
+        if api_keys.twelvedata:
+            self._twelvedata = TwelveDataProvider(
+                api_key=api_keys.twelvedata,
+                cache_manager=self.cache_manager,
+                budget_manager=self.budget_manager
             )
+            logger.debug("Provider TwelveData inicializado")
         
-        if providers_config.get("calendar", {}).get("enabled", False):
-            self._providers["calendar"] = CalendarProvider(
-                providers_config.get("calendar", {})
+        # FMP (backup calendário)
+        if api_keys.fmp:
+            self._fmp = FMPProvider(
+                api_key=api_keys.fmp,
+                cache_manager=self.cache_manager,
+                budget_manager=self.budget_manager
             )
+            logger.debug("Provider FMP inicializado")
         
-        logger.info(f"🔌 {len(self._providers)} providers inicializados")
+        # CFTC (COT Reports - gratuito)
+        self._cftc = CFTCProvider()
+        logger.debug("Provider CFTC inicializado (gratuito)")
     
-    def _init_analyzers(self):
-        """Inicializa os analyzers"""
-        analyzers_config = self._brain_config.analyzers
+    async def _check_providers_health(self):
+        """Verifica status de saúde dos providers"""
+        providers = [
+            ('cftc', self._cftc),
+            ('forexnews', self._forexnews),
+            ('finnhub', self._finnhub),
+            ('twelvedata', self._twelvedata),
+            ('fmp', self._fmp),
+        ]
         
-        if analyzers_config.get("news", {}).get("enabled", True):
-            self._analyzers["news"] = NewsAnalyzer(analyzers_config.get("news", {}))
-        
-        if analyzers_config.get("sentiment", {}).get("enabled", True):
-            self._analyzers["sentiment"] = SentimentAnalyzer(analyzers_config.get("sentiment", {}))
-        
-        if analyzers_config.get("macro", {}).get("enabled", True):
-            self._analyzers["macro"] = MacroAnalyzer(analyzers_config.get("macro", {}))
-        
-        logger.info(f"📊 {len(self._analyzers)} analyzers inicializados")
+        for name, provider in providers:
+            if provider:
+                try:
+                    status = await asyncio.wait_for(
+                        provider.health_check(),
+                        timeout=10
+                    )
+                    self._provider_status[name] = status
+                    emoji = "✅" if status else "❌"
+                    logger.info(f"{emoji} Provider {name}: {'OK' if status else 'FALHA'}")
+                except asyncio.TimeoutError:
+                    self._provider_status[name] = False
+                    logger.warning(f"⏱️ Provider {name}: timeout")
+                except Exception as e:
+                    self._provider_status[name] = False
+                    logger.warning(f"❌ Provider {name}: {e}")
     
-    # ============================================================
-    # Lifecycle
-    # ============================================================
+    async def _on_budget_alert(self, level: str, provider: str, message: str):
+        """Callback para alertas de budget"""
+        logger.warning(f"Budget Alert [{level}]: {message}")
+        # TODO: Integrar com Telegram para enviar alertas
     
-    async def start(self):
-        """Inicia o Brain Service"""
-        if self._running:
-            logger.warning("Brain já está rodando")
-            return
-        
-        self._running = True
-        logger.info("🧠 Brain Service iniciado")
-    
-    async def stop(self):
-        """Para o Brain Service"""
-        self._running = False
-        self._cache.clear()
-        logger.info("🧠 Brain Service parado")
-    
-    # ============================================================
-    # API de Notícias
-    # ============================================================
+    # ========================================================================
+    # MÉTODOS PÚBLICOS - NOTÍCIAS
+    # ========================================================================
     
     async def get_news(
         self,
-        symbol: Optional[str] = None,
+        symbols: Optional[List[str]] = None,
         limit: int = 10,
-        min_impact: str = "low"
+        hours_back: int = 24
     ) -> List[NewsItem]:
         """
-        Obtém notícias do mercado
+        Busca notícias agregadas de múltiplos providers.
         
         Args:
-            symbol: Símbolo específico (ex: "XAUUSD") ou None para todas
+            symbols: Símbolos para filtrar (None = todos)
             limit: Número máximo de notícias
-            min_impact: Impacto mínimo ("low", "medium", "high")
+            hours_back: Horas no passado
             
         Returns:
-            Lista de NewsItem
+            Lista de notícias ordenadas por timestamp
         """
-        cache_key = f"news:{symbol or 'all'}:{min_impact}"
-        ttl = self._brain_config.cache.get("ttl", {}).get("news", 900)
-        
-        # Verificar cache
-        cached = self._cache.get(cache_key)
+        # Tenta cache primeiro
+        cache_key = f"news:{':'.join(symbols or ['all'])}:{hours_back}"
+        cached = await self.cache_manager.get(cache_key, 'news')
         if cached:
-            logger.debug(f"📰 News do cache: {len(cached)} itens")
             return cached[:limit]
         
-        # Buscar de providers
-        news = []
+        all_news = []
         
-        if "forexnews" in self._providers:
-            if self._budget.can_use("forexnews"):
-                try:
-                    provider_news = await self._providers["forexnews"].get_news(symbol)
-                    news.extend(provider_news)
-                    self._budget.record_usage("forexnews")
-                except Exception as e:
-                    logger.error(f"Erro ao buscar ForexNews: {e}")
+        # ForexNews (principal)
+        if self._forexnews and self._provider_status.get('forexnews'):
+            try:
+                news = await self._forexnews.get_news(symbols, limit * 2, hours_back)
+                all_news.extend(news)
+            except Exception as e:
+                logger.warning(f"Erro ForexNews: {e}")
         
-        if "finnhub" in self._providers:
-            if self._budget.can_use("finnhub"):
-                try:
-                    provider_news = await self._providers["finnhub"].get_news(symbol)
-                    news.extend(provider_news)
-                    self._budget.record_usage("finnhub")
-                except Exception as e:
-                    logger.error(f"Erro ao buscar Finnhub: {e}")
+        # Finnhub (backup)
+        if self._finnhub and self._provider_status.get('finnhub'):
+            try:
+                news = await self._finnhub.get_news(symbols, limit)
+                all_news.extend(news)
+            except Exception as e:
+                logger.warning(f"Erro Finnhub: {e}")
         
-        # Filtrar por impacto
-        impact_levels = {"low": 0, "medium": 1, "high": 2}
-        min_level = impact_levels.get(min_impact, 0)
-        news = [
-            n for n in news 
-            if impact_levels.get(n.impact.value if isinstance(n.impact, NewsImpact) else n.impact, 0) >= min_level
-        ]
+        # Remove duplicatas (por título similar)
+        unique_news = self._deduplicate_news(all_news)
         
-        # Ordenar por data
-        news.sort(key=lambda x: x.published_at, reverse=True)
+        # Ordena por timestamp (mais recentes primeiro)
+        # Normaliza para comparar datas com/sem timezone
+        from datetime import timezone
+        def get_timestamp(x):
+            if x.timestamp.tzinfo is None:
+                return x.timestamp.replace(tzinfo=timezone.utc)
+            return x.timestamp
         
-        # Cachear
-        self._cache.set(cache_key, news, ttl=ttl)
+        unique_news.sort(key=get_timestamp, reverse=True)
         
-        logger.debug(f"📰 News buscadas: {len(news)} itens")
-        return news[:limit]
+        # Cache resultado
+        await self.cache_manager.set(cache_key, unique_news, 'news')
+        
+        return unique_news[:limit]
     
-    async def get_news_summary(
+    def _deduplicate_news(self, news: List[NewsItem]) -> List[NewsItem]:
+        """Remove notícias duplicadas por título similar"""
+        seen_titles = set()
+        unique = []
+        
+        for item in news:
+            # Normaliza título para comparação
+            normalized = item.title.lower().strip()[:50]
+            if normalized not in seen_titles:
+                seen_titles.add(normalized)
+                unique.append(item)
+        
+        return unique
+    
+    # ========================================================================
+    # MÉTODOS PÚBLICOS - SENTIMENTO
+    # ========================================================================
+    
+    async def get_sentiment(
         self,
-        symbol: str,
-        date: Optional[datetime] = None
-    ) -> Dict[str, Any]:
+        symbol: str
+    ) -> MarketSentiment:
         """
-        Obtém resumo de notícias para um símbolo
-        
-        Returns:
-            Dict com notícias resumidas e traduzidas
-        """
-        if "news" not in self._analyzers:
-            return {"news": [], "summary": ""}
-        
-        news = await self.get_news(symbol, limit=10, min_impact="medium")
-        return self._analyzers["news"].summarize(news, language="pt")
-    
-    # ============================================================
-    # API de Sentimento
-    # ============================================================
-    
-    async def get_sentiment(self, symbol: str) -> SentimentData:
-        """
-        Obtém análise de sentimento para um símbolo
+        Calcula sentimento agregado para um símbolo.
         
         Args:
-            symbol: Símbolo (ex: "XAUUSD")
+            symbol: Símbolo (ex: 'XAUUSD')
             
         Returns:
-            SentimentData com scores e análise
+            MarketSentiment com scores agregados
         """
+        # Tenta cache
         cache_key = f"sentiment:{symbol}"
-        ttl = self._brain_config.cache.get("ttl", {}).get("sentiment", 600)
-        
-        # Verificar cache
-        cached = self._cache.get(cache_key)
+        cached = await self.cache_manager.get(cache_key, 'sentiment')
         if cached:
             return cached
         
-        # Buscar notícias para análise
-        news = await self.get_news(symbol, limit=20)
+        sentiments = []
         
-        # Analisar sentimento
-        if "sentiment" in self._analyzers:
-            sentiment = self._analyzers["sentiment"].analyze(symbol, news)
-        else:
-            sentiment = SentimentData(
+        # ForexNews sentiment
+        if self._forexnews and self._provider_status.get('forexnews'):
+            try:
+                sent = await self._forexnews.get_sentiment(symbol)
+                if sent:
+                    sentiments.append(sent)
+            except Exception as e:
+                logger.warning(f"Erro sentimento ForexNews: {e}")
+        
+        # Agrega sentimentos
+        if not sentiments:
+            result = MarketSentiment(
                 symbol=symbol,
                 timestamp=datetime.now(),
-                level=SentimentLevel.NEUTRAL
+                overall_sentiment=0.0,
+                sentiment_level=SentimentLevel.NEUTRAL,
+                explanation_pt="Dados de sentimento não disponíveis"
+            )
+        else:
+            # Média ponderada
+            total_score = sum(s.news_sentiment for s in sentiments)
+            avg_score = total_score / len(sentiments)
+            
+            # Determina nível
+            if avg_score >= 0.5:
+                level = SentimentLevel.VERY_BULLISH
+            elif avg_score >= 0.2:
+                level = SentimentLevel.BULLISH
+            elif avg_score >= -0.2:
+                level = SentimentLevel.NEUTRAL
+            elif avg_score >= -0.5:
+                level = SentimentLevel.BEARISH
+            else:
+                level = SentimentLevel.VERY_BEARISH
+            
+            result = MarketSentiment(
+                symbol=symbol,
+                timestamp=datetime.now(),
+                news_sentiment=avg_score,
+                overall_sentiment=avg_score,
+                sentiment_level=level,
+                news_count=sum(s.news_count for s in sentiments),
+                sources=[s.sources[0] for s in sentiments if s.sources],
+                explanation_pt=sentiments[0].explanation_pt if sentiments else ""
             )
         
-        # Cachear
-        self._cache.set(cache_key, sentiment, ttl=ttl)
+        # Cache
+        await self.cache_manager.set(cache_key, result, 'sentiment')
         
-        return sentiment
+        return result
     
-    # ============================================================
-    # API de Calendário Econômico
-    # ============================================================
+    # ========================================================================
+    # MÉTODOS PÚBLICOS - CALENDÁRIO
+    # ========================================================================
     
     async def get_calendar_events(
         self,
-        days_ahead: int = 1,
-        min_impact: str = "low"
-    ) -> List[CalendarEvent]:
+        currencies: Optional[List[str]] = None,
+        days_ahead: int = 7,
+        impact_filter: Optional[NewsImpact] = None
+    ) -> List[EconomicEvent]:
         """
-        Obtém eventos do calendário econômico
+        Busca eventos do calendário econômico.
         
         Args:
-            days_ahead: Dias à frente para buscar
-            min_impact: Impacto mínimo
+            currencies: Moedas para filtrar
+            days_ahead: Dias à frente
+            impact_filter: Filtrar por impacto mínimo
             
         Returns:
-            Lista de CalendarEvent
+            Lista de eventos
         """
-        cache_key = f"calendar:{days_ahead}:{min_impact}"
-        ttl = self._brain_config.cache.get("ttl", {}).get("calendar", 3600)
-        
-        # Verificar cache
-        cached = self._cache.get(cache_key)
+        # Tenta cache
+        cache_key = f"calendar:{':'.join(currencies or ['all'])}:{days_ahead}"
+        cached = await self.cache_manager.get(cache_key, 'calendar')
         if cached:
-            return cached
-        
-        events = []
-        
-        if "calendar" in self._providers:
-            if self._budget.can_use("calendar"):
+            events = cached
+        else:
+            events = []
+            
+            # Finnhub (principal para calendário)
+            if self._finnhub and self._provider_status.get('finnhub'):
                 try:
-                    events = await self._providers["calendar"].get_events(days_ahead)
-                    self._budget.record_usage("calendar")
+                    ev = await self._finnhub.get_events(
+                        start_date=datetime.now(),
+                        end_date=datetime.now() + timedelta(days=days_ahead),
+                        currencies=currencies
+                    )
+                    events.extend(ev)
                 except Exception as e:
-                    logger.error(f"Erro ao buscar calendário: {e}")
+                    logger.warning(f"Erro calendário Finnhub: {e}")
+            
+            # FMP (backup)
+            if self._fmp and self._provider_status.get('fmp') and not events:
+                try:
+                    ev = await self._fmp.get_events(
+                        start_date=datetime.now(),
+                        end_date=datetime.now() + timedelta(days=days_ahead),
+                        currencies=currencies
+                    )
+                    events.extend(ev)
+                except Exception as e:
+                    logger.warning(f"Erro calendário FMP: {e}")
+            
+            # Cache
+            if events:
+                await self.cache_manager.set(cache_key, events, 'calendar')
         
-        # Filtrar por impacto
-        impact_levels = {"low": 0, "medium": 1, "high": 2}
-        min_level = impact_levels.get(min_impact, 0)
-        events = [
-            e for e in events
-            if impact_levels.get(e.impact.value if isinstance(e.impact, NewsImpact) else e.impact, 0) >= min_level
-        ]
-        
-        # Ordenar por data
-        events.sort(key=lambda x: x.datetime)
-        
-        # Cachear
-        self._cache.set(cache_key, events, ttl=ttl)
+        # Filtra por impacto se especificado
+        if impact_filter:
+            impact_values = {NewsImpact.LOW: 1, NewsImpact.MEDIUM: 2, NewsImpact.HIGH: 3}
+            min_impact = impact_values.get(impact_filter, 1)
+            events = [e for e in events if impact_values.get(e.impact, 1) >= min_impact]
         
         return events
     
-    async def get_high_impact_events(
+    async def get_today_events(
         self,
-        hours_ahead: int = 24
-    ) -> List[CalendarEvent]:
-        """Obtém apenas eventos de alto impacto"""
-        events = await self.get_calendar_events(days_ahead=2, min_impact="high")
-        
-        cutoff = datetime.now() + timedelta(hours=hours_ahead)
-        return [e for e in events if e.datetime <= cutoff]
+        currencies: Optional[List[str]] = None
+    ) -> List[EconomicEvent]:
+        """Busca eventos de hoje"""
+        if self._finnhub and self._provider_status.get('finnhub'):
+            return await self._finnhub.get_today_events(currencies)
+        return []
     
-    # ============================================================
-    # API de COT (Commitment of Traders)
-    # ============================================================
+    # ========================================================================
+    # MÉTODOS PÚBLICOS - COT
+    # ========================================================================
     
-    async def get_cot_data(self, symbol: str) -> Optional[COTData]:
+    async def get_cot_analysis(
+        self,
+        symbol: str
+    ) -> Dict[str, Any]:
         """
-        Obtém dados do COT Report
+        Busca análise do COT para um símbolo.
+        Usa CFTC (fonte oficial, gratuita) como principal.
         
         Args:
-            symbol: Símbolo (ex: "XAUUSD")
+            symbol: Símbolo
             
         Returns:
-            COTData ou None
+            Análise do COT
         """
+        # Tenta cache
         cache_key = f"cot:{symbol}"
-        ttl = self._brain_config.cache.get("ttl", {}).get("cot", 86400)
-        
-        # Verificar cache
-        cached = self._cache.get(cache_key)
+        cached = await self.cache_manager.get(cache_key, 'cot')
         if cached:
             return cached
         
-        cot_data = None
+        # CFTC é gratuito e sempre disponível
+        if self._cftc:
+            try:
+                cot_report = await self._cftc.get_cot_report(symbol)
+                if cot_report:
+                    result = {
+                        'symbol': symbol,
+                        'available': True,
+                        'report_date': cot_report.report_date.isoformat(),
+                        'nc_long': cot_report.nc_long,
+                        'nc_short': cot_report.nc_short,
+                        'nc_net': cot_report.nc_net,
+                        'comm_long': cot_report.comm_long,
+                        'comm_short': cot_report.comm_short,
+                        'comm_net': cot_report.comm_net,
+                        'open_interest': cot_report.open_interest,
+                        'sentiment': cot_report.sentiment,
+                        'explanation_pt': cot_report.explanation_pt,
+                        'source': 'CFTC'
+                    }
+                    await self.cache_manager.set(cache_key, result, 'cot')
+                    return result
+            except Exception as e:
+                logger.warning(f"Erro COT CFTC: {e}")
         
-        if "cot" in self._providers:
-            if self._budget.can_use("cot"):
-                try:
-                    cot_data = await self._providers["cot"].get_data(symbol)
-                    self._budget.record_usage("cot")
-                except Exception as e:
-                    logger.error(f"Erro ao buscar COT: {e}")
+        # Fallback para FMP se disponível
+        if self._fmp and self._provider_status.get('fmp'):
+            try:
+                cot = await self._fmp.get_cot_analysis(symbol)
+                if cot and cot.get('available'):
+                    await self.cache_manager.set(cache_key, cot, 'cot')
+                return cot
+            except Exception as e:
+                logger.warning(f"Erro COT FMP: {e}")
         
-        if cot_data:
-            self._cache.set(cache_key, cot_data, ttl=ttl)
-        
-        return cot_data
+        return {
+            'symbol': symbol,
+            'available': False,
+            'message': 'Dados COT não disponíveis'
+        }
     
-    # ============================================================
-    # API de Contexto Macro
-    # ============================================================
+    # ========================================================================
+    # MÉTODOS PÚBLICOS - INDICADORES TÉCNICOS
+    # ========================================================================
     
-    async def get_macro_context(self) -> Dict[str, Any]:
+    async def get_technical_indicators(
+        self,
+        symbol: str,
+        interval: str = '1h'
+    ) -> Dict[str, Any]:
         """
-        Obtém contexto macroeconômico geral
+        Busca indicadores técnicos de um símbolo.
         
+        Args:
+            symbol: Símbolo
+            interval: Timeframe
+            
         Returns:
-            Dict com indicadores macro e análise
+            Dict com indicadores
         """
-        cache_key = "macro:context"
-        ttl = self._brain_config.cache.get("ttl", {}).get("macro", 3600)
-        
-        # Verificar cache
-        cached = self._cache.get(cache_key)
+        # Tenta cache
+        cache_key = f"indicators:{symbol}:{interval}"
+        cached = await self.cache_manager.get(cache_key, 'indicator')
         if cached:
             return cached
         
-        context = {}
+        if self._twelvedata and self._provider_status.get('twelvedata'):
+            try:
+                indicators = await self._twelvedata.get_all_indicators(symbol, interval)
+                await self.cache_manager.set(cache_key, indicators, 'indicator')
+                return indicators
+            except Exception as e:
+                logger.warning(f"Erro indicadores TwelveData: {e}")
         
-        if "macro" in self._analyzers:
-            context = await self._analyzers["macro"].get_context()
-        
-        self._cache.set(cache_key, context, ttl=ttl)
-        
-        return context
+        return {
+            'symbol': symbol,
+            'interval': interval,
+            'error': 'Indicadores não disponíveis'
+        }
     
-    # ============================================================
-    # API de Status
-    # ============================================================
+    # ========================================================================
+    # MÉTODOS PÚBLICOS - BRIEFING
+    # ========================================================================
     
-    def get_status(self) -> BrainStatus:
-        """Retorna status do Brain Service"""
-        return BrainStatus(
-            running=self._running,
-            cache_status=self._cache.get_stats(),
-            budget_status=self._budget.get_status(),
-            providers_status={
-                name: True for name in self._providers.keys()
-            },
-            last_update=datetime.now()
+    async def generate_daily_briefing(
+        self,
+        symbols: Optional[List[str]] = None
+    ) -> DailyBriefing:
+        """
+        Gera briefing diário completo.
+        
+        Args:
+            symbols: Símbolos para incluir (default: todos configurados)
+            
+        Returns:
+            DailyBriefing com todas as informações
+        """
+        if symbols is None:
+            symbols = self.config.symbols if self.config else ['XAUUSD', 'EURUSD', 'GBPUSD']
+        
+        logger.info(f"📋 Gerando briefing diário para {symbols}")
+        
+        # Coleta dados em paralelo
+        news_task = self.get_news(symbols, limit=5, hours_back=24)
+        events_task = self.get_today_events()
+        
+        sentiments_tasks = [self.get_sentiment(s) for s in symbols]
+        
+        # Aguarda todas as tasks
+        results = await asyncio.gather(
+            news_task,
+            events_task,
+            *sentiments_tasks,
+            return_exceptions=True
         )
+        
+        # Processa resultados
+        news = results[0] if not isinstance(results[0], Exception) else []
+        events = results[1] if not isinstance(results[1], Exception) else []
+        sentiments = {}
+        for i, symbol in enumerate(symbols):
+            result = results[2 + i]
+            if not isinstance(result, Exception):
+                sentiments[symbol] = result
+        
+        # Monta briefing
+        briefing = DailyBriefing(
+            date=datetime.now(),
+            top_news=news,
+            events=events,
+            sentiments=sentiments,
+            summary_pt=self._generate_briefing_summary(news, events, sentiments)
+        )
+        
+        return briefing
     
-    def get_budget_status(self) -> Dict[str, Any]:
-        """Retorna status do budget de APIs"""
-        return self._budget.get_status()
+    def _generate_briefing_summary(
+        self,
+        news: List[NewsItem],
+        events: List[EconomicEvent],
+        sentiments: Dict[str, MarketSentiment]
+    ) -> str:
+        """Gera resumo do briefing em português"""
+        lines = [
+            "📊 **BRIEFING DIÁRIO DO MERCADO**",
+            f"📅 {datetime.now().strftime('%d/%m/%Y %H:%M')}",
+            ""
+        ]
+        
+        # Sentimentos
+        if sentiments:
+            lines.append("**SENTIMENTO POR ATIVO:**")
+            for symbol, sent in sentiments.items():
+                emoji = "🟢" if sent.overall_sentiment > 0.2 else "🔴" if sent.overall_sentiment < -0.2 else "🟡"
+                lines.append(f"{emoji} {symbol}: {sent.sentiment_level.value} ({sent.overall_sentiment:+.2f})")
+            lines.append("")
+        
+        # Eventos importantes
+        high_impact = [e for e in events if e.impact == NewsImpact.HIGH]
+        if high_impact:
+            lines.append("**⚠️ EVENTOS DE ALTO IMPACTO HOJE:**")
+            for event in high_impact[:5]:
+                time_str = event.timestamp.strftime('%H:%M')
+                lines.append(f"• {time_str} - {event.name_pt or event.name} ({event.currency})")
+            lines.append("")
+        
+        # Notícias principais
+        if news:
+            lines.append("**📰 PRINCIPAIS NOTÍCIAS:**")
+            for item in news[:3]:
+                lines.append(f"• {item.title}")
+            lines.append("")
+        
+        return "\n".join(lines)
     
-    def get_cache_stats(self) -> Dict[str, Any]:
-        """Retorna estatísticas do cache"""
-        return self._cache.get_stats()
-
-
-# ============================================================
-# Singleton Helper
-# ============================================================
-
-_brain_instance: Optional[BrainService] = None
-
-
-def get_brain() -> BrainService:
-    """
-    Retorna instância singleton do Brain Service
+    # ========================================================================
+    # STATUS E MÉTRICAS
+    # ========================================================================
     
-    Uso:
-        brain = get_brain()
-        news = await brain.get_news("XAUUSD")
-    """
-    global _brain_instance
-    if _brain_instance is None:
-        _brain_instance = BrainService()
-    return _brain_instance
+    def get_status(self) -> Dict[str, Any]:
+        """Retorna status do Brain"""
+        return {
+            'initialized': self._initialized,
+            'providers': self._provider_status,
+            'cache_stats': self.cache_manager.get_stats() if self.cache_manager else {},
+            'budget_status': self.budget_manager.get_all_status() if self.budget_manager else {},
+        }
+    
+    async def shutdown(self):
+        """Encerra o Brain Service"""
+        logger.info("🧠 Encerrando Brain Service...")
+        
+        # Fecha providers
+        for provider in [self._forexnews, self._finnhub, self._twelvedata, self._fmp]:
+            if provider:
+                await provider.close()
+        
+        logger.info("✅ Brain Service encerrado")
+
+
+# Função helper para obter instância
+async def get_brain() -> BrainService:
+    """Retorna instância do Brain Service"""
+    return await BrainService.get_instance()

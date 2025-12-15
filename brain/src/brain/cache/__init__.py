@@ -1,6 +1,12 @@
-# Brain Cache Module
-from .redis_cache import RedisCache
-from .memory_cache import MemoryCache
-from .cache_policy import CachePolicy
+"""
+VIRTUS Brain - Cache Module
+"""
 
-__all__ = ['RedisCache', 'MemoryCache', 'CachePolicy']
+from .cache_manager import CacheManager, CacheEntry, cached, get_cache_manager
+
+__all__ = [
+    'CacheManager',
+    'CacheEntry',
+    'cached',
+    'get_cache_manager',
+]

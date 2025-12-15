@@ -1,119 +1,176 @@
-# ============================================================
-# 🧠 BRAIN - Configuração Global
-# ============================================================
+# ============================================================================
+# VIRTUS - Sistema Multi-Bot de Trading
+# Configuração Global Principal
+# ============================================================================
 
 system:
-  name: "BRAIN"
+  name: "VIRTUS"
   version: "1.0.0"
   environment: "development"  # development | staging | production
   debug: true
 
-# Localização e timezone
-localization:
+# ============================================================================
+# METATRADER 5
+# ============================================================================
+mt5:
+  path: "C:\\Program Files\\Pepperstone MetaTrader 5\\terminal64.exe"
+  login: 61446576
+  password: "Joao8804"
+  server: "Pepperstone-Demo"
+  timeout: 60000
+  retries: 3
+  retry_delay: 5
+
+# ============================================================================
+# TELEGRAM
+# ============================================================================
+telegram:
+  bot_token: "8334321679:AAHZI9cFlflEigDR4ZlkZ68YWiPNPIhoEdc"
+  chat_id: "7005082427"
+  enabled: true
+  notifications:
+    trades: true
+    alerts: true
+    daily_report: true
+    errors: true
+
+# ============================================================================
+# API KEYS
+# ============================================================================
+api_keys:
+  forexnews: "w4tne6w3psyvivompbkvvh2h7l5jxkzlhn24ku03"
+  finnhub: "d4vle51r01qs25f0ri60d4vle51r01qs25f0ri6g"
+  finazon: "830c05bb65994f99ae39629a0e9f8edffw"
+  twelvedata: "a0f59fab7a354ce080c93b0b019e5e61"
+  financialmodelingprep: "ZvAVZ4inPZ4mtTnJ4cuLSQYYSrLQcfkr"
+
+# ============================================================================
+# SÍMBOLOS ATIVOS
+# ============================================================================
+symbols:
+  enabled:
+    - "XAUUSD"   # Gold
+    - "EURUSD"   # Euro
+    - "GBPUSD"   # British Pound
+
+# ============================================================================
+# BOTS
+# ============================================================================
+bots:
+  gold_bot:
+    enabled: true
+    config_file: "bots/gold.yaml"
+    priority: "high"
+  
+  euro_bot:
+    enabled: true
+    config_file: "bots/euro.yaml"
+    priority: "normal"
+  
+  gbp_bot:
+    enabled: false  # Desabilitado inicialmente
+    config_file: "bots/gbp.yaml"
+    priority: "normal"
+
+# ============================================================================
+# RISCO GLOBAL
+# ============================================================================
+risk:
+  max_total_positions: 6          # Máximo de posições simultâneas (todos os bots)
+  max_daily_loss_usd: 500.0       # Perda máxima diária total
+  max_drawdown_percent: 10.0      # Drawdown máximo permitido
+  correlation_limit: 0.7          # Limite de correlação entre posições
+  max_exposure_percent: 30.0      # Exposição máxima da conta
+
+# ============================================================================
+# ADVISOR / RELATÓRIOS
+# ============================================================================
+advisor:
+  enabled: true
   language: "pt-BR"
   timezone: "America/Sao_Paulo"
-  date_format: "%d/%m/%Y"
-  time_format: "%H:%M:%S"
-
-# MetaTrader 5
-mt5:
-  path: "C:\\Program Files\\MetaTrader 5\\terminal64.exe"
-  login: null  # Definir via variável de ambiente MT5_LOGIN
-  password: null  # Definir via variável de ambiente MT5_PASSWORD
-  server: null  # Definir via variável de ambiente MT5_SERVER
-  timeout: 60000
-  portable: false
-
-# Bots ativos
-bots:
-  enabled:
-    - "gold"
-    - "euro"
-    - "gbp"
   
-  # Intervalo de trading em segundos
-  trading_interval: 5
-  
-  # Intervalo de monitoramento de posições
-  position_check_interval: 2
-
-# Configuração global de risco
-risk:
-  max_total_positions: 6  # Máximo total (todos os bots)
-  max_daily_loss_usd: 500.0  # Perda diária máxima total
-  max_daily_loss_percent: 5.0  # Perda diária máxima em %
-  max_drawdown_percent: 10.0  # Drawdown máximo
-  correlation_limit: 0.7  # Limite de correlação entre posições
-  
-# Sessões de trading
-sessions:
-  london:
-    start: "08:00"
-    end: "17:00"
-    timezone: "Europe/London"
-  
-  new_york:
-    start: "08:00"
-    end: "17:00"
-    timezone: "America/New_York"
-  
-  tokyo:
-    start: "09:00"
-    end: "18:00"
-    timezone: "Asia/Tokyo"
-
-# Horários de pausa (evitar trading)
-trading_blackout:
-  # Eventos de alto impacto - pausar X minutos antes/depois
-  high_impact_buffer_minutes: 15
-  
-  # Horários fixos de pausa
-  daily_blackouts:
-    - start: "23:55"
-      end: "00:05"
-      reason: "Rollover"
-    - start: "12:55"
-      end: "13:05"
-      reason: "Almoço NY"
-
-# Relatórios e notificações
-reporting:
   daily_briefing:
     enabled: true
     hour: 7
     minute: 30
+    include_symbols: ["XAUUSD", "EURUSD", "GBPUSD"]
   
-  weekly_report:
-    enabled: true
-    day: "monday"
-    hour: 8
-    minute: 0
+  news:
+    summarize: true
+    translate_to: "pt"
+    max_per_briefing: 5
+    min_impact: "high"
+  
+  sentiment:
+    calculate_overall: true
+    include_explanation: true
 
-# Alertas
+# ============================================================================
+# ALERTAS
+# ============================================================================
 alerts:
-  calendar_events: true
-  regime_change: true
-  cot_extremes: true
-  correlation_breach: true
-  drawdown_warning: true
-  drawdown_warning_threshold: 5.0  # %
+  calendar_events: true           # Alertas de eventos econômicos
+  regime_change: true             # Mudança de regime de mercado
+  cot_extremes: true              # COT em níveis extremos
+  correlation_breach: true        # Correlação acima do limite
+  high_volatility: true           # Volatilidade acima do normal
+  minutes_before_event: 15        # Minutos antes de evento importante
 
-# Logging
+# ============================================================================
+# LOGGING
+# ============================================================================
 logging:
-  level: "INFO"  # DEBUG | INFO | WARNING | ERROR
-  file_rotation: "daily"
-  max_files: 30
-  format: "%(asctime)s | %(levelname)-8s | %(name)s | %(message)s"
+  level: "INFO"                   # DEBUG | INFO | WARNING | ERROR
+  format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+  file:
+    enabled: true
+    path: "data/logs"
+    max_size_mb: 10
+    backup_count: 5
 
-# Database
+# ============================================================================
+# DATABASE
+# ============================================================================
 database:
-  type: "sqlite"  # sqlite | postgresql
-  path: "data/brain.db"
+  type: "sqlite"                  # sqlite | postgresql
+  path: "data/virtus.db"
   
-# Cache Redis (opcional)
-redis:
-  enabled: false
-  host: "localhost"
-  port: 6379
-  db: 0
-  password: null
+# ============================================================================
+# CACHE (REDIS)
+# ============================================================================
+cache:
+  type: "memory"                  # memory | redis
+  redis:
+    host: "localhost"
+    port: 6379
+    db: 0
+    password: null
+
+# ============================================================================
+# HORÁRIOS DE OPERAÇÃO
+# ============================================================================
+trading_hours:
+  enabled: true
+  timezone: "America/Sao_Paulo"
+  
+  # Sessões de trading
+  sessions:
+    asian:
+      start: "20:00"              # Hora local
+      end: "05:00"
+    london:
+      start: "04:00"
+      end: "12:00"
+    newyork:
+      start: "09:00"
+      end: "17:00"
+  
+  # Dias de não operação
+  skip_days:
+    - "Saturday"
+    - "Sunday"
+  
+  # Pausar antes de eventos de alto impacto
+  pause_before_high_impact: true
+  pause_minutes: 15

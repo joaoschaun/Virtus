@@ -1,18 +1,29 @@
 """
-BRAIN - Scheduler
-Agendador de tarefas periódicas
+VIRTUS Core - Scheduler
+=======================
+
+Sistema de agendamento de tarefas.
 """
 
 import asyncio
-from datetime import datetime, time, timedelta
-from typing import Callable, Dict, List, Optional, Any
+from datetime import datetime, timedelta
+from typing import Callable, Dict, Optional, Any, List, Coroutine
 from dataclasses import dataclass, field
-import pytz
+from enum import Enum
+import functools
 
-from .config import Config
 from .logger import get_logger
 
 logger = get_logger("scheduler")
+
+
+class TaskStatus(Enum):
+    """Status de uma tarefa agendada"""
+    PENDING = "PENDING"
+    RUNNING = "RUNNING"
+    COMPLETED = "COMPLETED"
+    FAILED = "FAILED"
+    CANCELLED = "CANCELLED"
 
 
 @dataclass
@@ -21,268 +32,348 @@ class ScheduledTask:
     id: str
     name: str
     callback: Callable
-    schedule_type: str  # "cron", "interval", "daily"
-    enabled: bool = True
+    interval_seconds: Optional[float] = None
+    run_at: Optional[datetime] = None
+    repeat: bool = False
     
-    # Para schedule_type = "interval"
-    interval_seconds: int = 0
-    
-    # Para schedule_type = "daily" ou "cron"
-    hour: int = 0
-    minute: int = 0
-    day_of_week: Optional[str] = None  # "monday", "tuesday", etc.
-    
-    # Timezone
-    timezone: str = "America/Sao_Paulo"
-    
-    # Estado
+    # Status
+    status: TaskStatus = TaskStatus.PENDING
     last_run: Optional[datetime] = None
     next_run: Optional[datetime] = None
     run_count: int = 0
     error_count: int = 0
+    last_error: Optional[str] = None
     
-    # Args para o callback
-    args: tuple = field(default_factory=tuple)
-    kwargs: Dict[str, Any] = field(default_factory=dict)
+    # Handle da task asyncio
+    _task: Optional[asyncio.Task] = field(default=None, repr=False)
 
 
-class TaskScheduler:
+class Scheduler:
     """
-    Agendador de tarefas do sistema BRAIN
+    Gerenciador de tarefas agendadas.
     
     Suporta:
-    - Tarefas com intervalo fixo
-    - Tarefas diárias em horário específico
-    - Tarefas semanais (cron-like)
+    - Tarefas periódicas (intervalo fixo)
+    - Tarefas agendadas (horário específico)
+    - Tarefas únicas ou repetitivas
     """
     
     def __init__(self):
-        self._config = Config()
         self._tasks: Dict[str, ScheduledTask] = {}
         self._running = False
-        self._task_loop: Optional[asyncio.Task] = None
+        self._task_counter = 0
     
-    def add_task(
+    def _generate_task_id(self, name: str) -> str:
+        """Gera ID único para tarefa"""
+        self._task_counter += 1
+        return f"{name}_{self._task_counter}"
+    
+    def add_periodic_task(
         self,
-        task_id: str,
         name: str,
-        callback: Callable,
-        schedule_type: str = "interval",
-        interval_seconds: int = 60,
-        hour: int = 0,
-        minute: int = 0,
-        day_of_week: Optional[str] = None,
-        timezone: str = "America/Sao_Paulo",
-        args: tuple = (),
-        kwargs: Optional[Dict[str, Any]] = None
-    ) -> ScheduledTask:
+        callback: Callable[[], Coroutine],
+        interval_seconds: float,
+        start_immediately: bool = False
+    ) -> str:
         """
-        Adiciona uma tarefa ao agendador
+        Adiciona tarefa periódica.
         
         Args:
-            task_id: ID único da tarefa
-            name: Nome descritivo
-            callback: Função a ser executada (async ou sync)
-            schedule_type: "interval", "daily" ou "weekly"
-            interval_seconds: Intervalo em segundos (para type=interval)
-            hour: Hora de execução (para type=daily/weekly)
-            minute: Minuto de execução
-            day_of_week: Dia da semana (para type=weekly)
-            timezone: Timezone para agendamento
-            args: Argumentos posicionais para o callback
-            kwargs: Argumentos nomeados para o callback
+            name: Nome da tarefa
+            callback: Função async a executar
+            interval_seconds: Intervalo entre execuções
+            start_immediately: Se deve executar imediatamente
             
         Returns:
-            ScheduledTask criada
+            ID da tarefa
         """
+        task_id = self._generate_task_id(name)
+        
+        next_run = datetime.now()
+        if not start_immediately:
+            next_run += timedelta(seconds=interval_seconds)
+        
         task = ScheduledTask(
             id=task_id,
             name=name,
             callback=callback,
-            schedule_type=schedule_type,
             interval_seconds=interval_seconds,
-            hour=hour,
-            minute=minute,
-            day_of_week=day_of_week,
-            timezone=timezone,
-            args=args,
-            kwargs=kwargs or {}
+            repeat=True,
+            next_run=next_run
         )
         
-        # Calcular próxima execução
-        task.next_run = self._calculate_next_run(task)
+        self._tasks[task_id] = task
+        logger.info(f"📅 Tarefa periódica adicionada: {name} (cada {interval_seconds}s)")
+        
+        return task_id
+    
+    def add_scheduled_task(
+        self,
+        name: str,
+        callback: Callable[[], Coroutine],
+        run_at: datetime,
+        repeat_daily: bool = False
+    ) -> str:
+        """
+        Adiciona tarefa para horário específico.
+        
+        Args:
+            name: Nome da tarefa
+            callback: Função async a executar
+            run_at: Horário de execução
+            repeat_daily: Se deve repetir diariamente
+            
+        Returns:
+            ID da tarefa
+        """
+        task_id = self._generate_task_id(name)
+        
+        # Se o horário já passou hoje, agenda para amanhã
+        now = datetime.now()
+        if run_at <= now:
+            run_at = run_at + timedelta(days=1)
+        
+        interval = 86400 if repeat_daily else None  # 24 horas em segundos
+        
+        task = ScheduledTask(
+            id=task_id,
+            name=name,
+            callback=callback,
+            run_at=run_at,
+            interval_seconds=interval,
+            repeat=repeat_daily,
+            next_run=run_at
+        )
         
         self._tasks[task_id] = task
-        logger.info(f"📅 Tarefa agendada: {name} ({schedule_type})")
+        logger.info(f"📅 Tarefa agendada: {name} para {run_at.strftime('%H:%M:%S')}")
         
-        return task
+        return task_id
+    
+    def add_once_task(
+        self,
+        name: str,
+        callback: Callable[[], Coroutine],
+        delay_seconds: float = 0
+    ) -> str:
+        """
+        Adiciona tarefa única.
+        
+        Args:
+            name: Nome da tarefa
+            callback: Função async a executar
+            delay_seconds: Atraso antes da execução
+            
+        Returns:
+            ID da tarefa
+        """
+        task_id = self._generate_task_id(name)
+        
+        run_at = datetime.now() + timedelta(seconds=delay_seconds)
+        
+        task = ScheduledTask(
+            id=task_id,
+            name=name,
+            callback=callback,
+            run_at=run_at,
+            repeat=False,
+            next_run=run_at
+        )
+        
+        self._tasks[task_id] = task
+        logger.debug(f"📅 Tarefa única adicionada: {name}")
+        
+        return task_id
+    
+    def cancel_task(self, task_id: str) -> bool:
+        """Cancela uma tarefa"""
+        if task_id not in self._tasks:
+            return False
+        
+        task = self._tasks[task_id]
+        task.status = TaskStatus.CANCELLED
+        
+        if task._task and not task._task.done():
+            task._task.cancel()
+        
+        logger.info(f"❌ Tarefa cancelada: {task.name}")
+        return True
     
     def remove_task(self, task_id: str) -> bool:
-        """Remove uma tarefa do agendador"""
-        if task_id in self._tasks:
-            del self._tasks[task_id]
-            logger.info(f"📅 Tarefa removida: {task_id}")
-            return True
-        return False
-    
-    def enable_task(self, task_id: str) -> bool:
-        """Habilita uma tarefa"""
-        if task_id in self._tasks:
-            self._tasks[task_id].enabled = True
-            self._tasks[task_id].next_run = self._calculate_next_run(self._tasks[task_id])
-            return True
-        return False
-    
-    def disable_task(self, task_id: str) -> bool:
-        """Desabilita uma tarefa"""
-        if task_id in self._tasks:
-            self._tasks[task_id].enabled = False
-            return True
-        return False
-    
-    def _calculate_next_run(self, task: ScheduledTask) -> datetime:
-        """Calcula a próxima execução de uma tarefa"""
-        tz = pytz.timezone(task.timezone)
-        now = datetime.now(tz)
+        """Remove uma tarefa"""
+        if task_id not in self._tasks:
+            return False
         
-        if task.schedule_type == "interval":
-            return now + timedelta(seconds=task.interval_seconds)
-        
-        elif task.schedule_type == "daily":
-            # Próxima execução no horário especificado
-            target_time = now.replace(
-                hour=task.hour,
-                minute=task.minute,
-                second=0,
-                microsecond=0
-            )
-            
-            # Se já passou hoje, agendar para amanhã
-            if target_time <= now:
-                target_time += timedelta(days=1)
-            
-            return target_time
-        
-        elif task.schedule_type == "weekly":
-            # Encontrar o próximo dia da semana
-            days = {
-                "monday": 0, "tuesday": 1, "wednesday": 2,
-                "thursday": 3, "friday": 4, "saturday": 5, "sunday": 6
+        self.cancel_task(task_id)
+        del self._tasks[task_id]
+        return True
+    
+    def get_task_status(self, task_id: str) -> Optional[ScheduledTask]:
+        """Retorna status de uma tarefa"""
+        return self._tasks.get(task_id)
+    
+    def list_tasks(self) -> List[Dict[str, Any]]:
+        """Lista todas as tarefas"""
+        return [
+            {
+                'id': task.id,
+                'name': task.name,
+                'status': task.status.value,
+                'last_run': task.last_run.isoformat() if task.last_run else None,
+                'next_run': task.next_run.isoformat() if task.next_run else None,
+                'run_count': task.run_count,
+                'error_count': task.error_count,
             }
-            target_day = days.get(task.day_of_week.lower(), 0)
-            current_day = now.weekday()
-            
-            days_ahead = target_day - current_day
-            if days_ahead <= 0:  # Já passou esta semana
-                days_ahead += 7
-            
-            target_date = now + timedelta(days=days_ahead)
-            target_time = target_date.replace(
-                hour=task.hour,
-                minute=task.minute,
-                second=0,
-                microsecond=0
-            )
-            
-            return target_time
-        
-        return now + timedelta(hours=1)  # Fallback
+            for task in self._tasks.values()
+        ]
     
     async def _run_task(self, task: ScheduledTask):
         """Executa uma tarefa"""
+        task.status = TaskStatus.RUNNING
+        task.last_run = datetime.now()
+        
         try:
-            logger.debug(f"⏰ Executando tarefa: {task.name}")
-            
-            # Verificar se é async
-            if asyncio.iscoroutinefunction(task.callback):
-                await task.callback(*task.args, **task.kwargs)
-            else:
-                task.callback(*task.args, **task.kwargs)
-            
+            await task.callback()
+            task.status = TaskStatus.COMPLETED
             task.run_count += 1
-            task.last_run = datetime.now(pytz.timezone(task.timezone))
+            logger.debug(f"✅ Tarefa completada: {task.name}")
             
-            logger.debug(f"✅ Tarefa concluída: {task.name}")
+        except asyncio.CancelledError:
+            task.status = TaskStatus.CANCELLED
+            raise
             
         except Exception as e:
+            task.status = TaskStatus.FAILED
             task.error_count += 1
+            task.last_error = str(e)
             logger.error(f"❌ Erro na tarefa {task.name}: {e}")
+        
+        # Agenda próxima execução se repetitiva
+        if task.repeat and task.interval_seconds:
+            task.next_run = datetime.now() + timedelta(seconds=task.interval_seconds)
+            task.status = TaskStatus.PENDING
     
-    async def _scheduler_loop(self):
-        """Loop principal do agendador"""
-        logger.info("⏰ Scheduler iniciado")
-        
-        while self._running:
-            now = datetime.now(pytz.timezone("America/Sao_Paulo"))
-            
-            for task in self._tasks.values():
-                if not task.enabled:
-                    continue
+    async def _task_loop(self, task: ScheduledTask):
+        """Loop de execução para uma tarefa"""
+        try:
+            while self._running and task.status != TaskStatus.CANCELLED:
+                if task.next_run:
+                    # Espera até o próximo horário de execução
+                    now = datetime.now()
+                    if task.next_run > now:
+                        wait_seconds = (task.next_run - now).total_seconds()
+                        await asyncio.sleep(wait_seconds)
                 
-                if task.next_run and now >= task.next_run:
-                    # Executar tarefa
-                    asyncio.create_task(self._run_task(task))
+                if not self._running or task.status == TaskStatus.CANCELLED:
+                    break
+                
+                await self._run_task(task)
+                
+                if not task.repeat:
+                    break
                     
-                    # Calcular próxima execução
-                    task.next_run = self._calculate_next_run(task)
-            
-            # Aguardar 1 segundo antes de verificar novamente
-            await asyncio.sleep(1)
-        
-        logger.info("⏰ Scheduler parado")
+        except asyncio.CancelledError:
+            task.status = TaskStatus.CANCELLED
     
     async def start(self):
-        """Inicia o agendador"""
+        """Inicia o scheduler"""
         if self._running:
-            logger.warning("Scheduler já está rodando")
             return
         
         self._running = True
-        self._task_loop = asyncio.create_task(self._scheduler_loop())
+        logger.info("🚀 Scheduler iniciado")
         
-        logger.info(f"⏰ Scheduler iniciado com {len(self._tasks)} tarefas")
+        # Inicia tasks para cada tarefa
+        for task in self._tasks.values():
+            if task.status != TaskStatus.CANCELLED:
+                task._task = asyncio.create_task(self._task_loop(task))
     
     async def stop(self):
-        """Para o agendador"""
+        """Para o scheduler"""
         self._running = False
         
-        if self._task_loop:
-            self._task_loop.cancel()
-            try:
-                await self._task_loop
-            except asyncio.CancelledError:
-                pass
+        # Cancela todas as tasks
+        for task in self._tasks.values():
+            if task._task and not task._task.done():
+                task._task.cancel()
+                try:
+                    await task._task
+                except asyncio.CancelledError:
+                    pass
         
-        logger.info("⏰ Scheduler parado")
+        logger.info("🛑 Scheduler parado")
     
-    def get_status(self) -> Dict[str, Any]:
-        """Retorna status do agendador"""
-        return {
-            "running": self._running,
-            "total_tasks": len(self._tasks),
-            "enabled_tasks": sum(1 for t in self._tasks.values() if t.enabled),
-            "tasks": [
-                {
-                    "id": t.id,
-                    "name": t.name,
-                    "enabled": t.enabled,
-                    "schedule_type": t.schedule_type,
-                    "next_run": t.next_run.isoformat() if t.next_run else None,
-                    "run_count": t.run_count,
-                    "error_count": t.error_count
-                }
-                for t in self._tasks.values()
-            ]
-        }
+    async def run_forever(self):
+        """Executa o scheduler indefinidamente"""
+        await self.start()
+        try:
+            while self._running:
+                await asyncio.sleep(1)
+        except asyncio.CancelledError:
+            await self.stop()
+
+
+# Decorador para tarefas periódicas
+def periodic(interval_seconds: float, start_immediately: bool = False):
+    """
+    Decorador para transformar função em tarefa periódica.
+    
+    Usage:
+        @periodic(60)  # Executa a cada 60 segundos
+        async def my_task():
+            ...
+    """
+    def decorator(func: Callable):
+        @functools.wraps(func)
+        def wrapper(scheduler: Scheduler) -> str:
+            return scheduler.add_periodic_task(
+                name=func.__name__,
+                callback=func,
+                interval_seconds=interval_seconds,
+                start_immediately=start_immediately
+            )
+        wrapper._is_periodic = True
+        wrapper._interval = interval_seconds
+        return wrapper
+    return decorator
+
+
+# Decorador para tarefas diárias
+def daily(hour: int, minute: int = 0):
+    """
+    Decorador para tarefa diária em horário específico.
+    
+    Usage:
+        @daily(8, 30)  # Executa todo dia às 8:30
+        async def my_task():
+            ...
+    """
+    def decorator(func: Callable):
+        @functools.wraps(func)
+        def wrapper(scheduler: Scheduler) -> str:
+            run_at = datetime.now().replace(
+                hour=hour, minute=minute, second=0, microsecond=0
+            )
+            return scheduler.add_scheduled_task(
+                name=func.__name__,
+                callback=func,
+                run_at=run_at,
+                repeat_daily=True
+            )
+        wrapper._is_daily = True
+        wrapper._hour = hour
+        wrapper._minute = minute
+        return wrapper
+    return decorator
 
 
 # Instância global do scheduler
-_scheduler: Optional[TaskScheduler] = None
+_scheduler: Optional[Scheduler] = None
 
 
-def get_scheduler() -> TaskScheduler:
-    """Retorna instância singleton do scheduler"""
+def get_scheduler() -> Scheduler:
+    """Retorna instância global do scheduler"""
     global _scheduler
     if _scheduler is None:
-        _scheduler = TaskScheduler()
+        _scheduler = Scheduler()
     return _scheduler

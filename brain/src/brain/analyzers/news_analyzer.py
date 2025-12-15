@@ -1,312 +1,659 @@
 """
-BRAIN - News Analyzer
-Analisador de notícias
+VIRTUS News Analyzer
+=====================
+
+Analisa e processa notícias do mercado financeiro.
+Integra com providers do Brain para obter dados de múltiplas fontes.
 """
 
 from datetime import datetime, timedelta
-from typing import Any, Dict, List, Optional, Tuple
-from collections import Counter
+from typing import Dict, List, Optional, Any, Set, Tuple
+from dataclasses import dataclass, field
+from enum import Enum, auto
+import asyncio
+import re
+from collections import defaultdict
 
-from ...core.types import NewsItem, NewsImpact, SignalDirection
-from ...core.logger import get_logger
+try:
+    from ...core import VirtusLogger
+except ImportError:
+    from core import VirtusLogger
 
-logger = get_logger("brain.analyzer.news")
+
+class NewsImpact(Enum):
+    """Impacto esperado da notícia."""
+    LOW = "low"
+    MEDIUM = "medium"
+    HIGH = "high"
+    CRITICAL = "critical"
+
+
+class NewsSentiment(Enum):
+    """Sentimento da notícia."""
+    VERY_BEARISH = -2
+    BEARISH = -1
+    NEUTRAL = 0
+    BULLISH = 1
+    VERY_BULLISH = 2
+
+
+class NewsCategory(Enum):
+    """Categoria da notícia."""
+    ECONOMIC_DATA = "economic_data"
+    CENTRAL_BANK = "central_bank"
+    GEOPOLITICAL = "geopolitical"
+    CORPORATE = "corporate"
+    COMMODITY = "commodity"
+    TECHNICAL = "technical"
+    GENERAL = "general"
+
+
+@dataclass
+class NewsItem:
+    """Uma notícia individual."""
+    id: str
+    title: str
+    description: str
+    source: str
+    url: str
+    published_at: datetime
+    
+    # Análise
+    impact: NewsImpact = NewsImpact.LOW
+    sentiment: NewsSentiment = NewsSentiment.NEUTRAL
+    category: NewsCategory = NewsCategory.GENERAL
+    
+    # Relevância
+    symbols: List[str] = field(default_factory=list)
+    keywords: List[str] = field(default_factory=list)
+    relevance_score: float = 0.0
+    
+    # Metadata
+    processed: bool = False
+    processed_at: Optional[datetime] = None
+    
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            'id': self.id,
+            'title': self.title,
+            'source': self.source,
+            'published_at': self.published_at.isoformat(),
+            'impact': self.impact.value,
+            'sentiment': self.sentiment.name,
+            'category': self.category.value,
+            'symbols': self.symbols,
+            'relevance_score': round(self.relevance_score, 3),
+        }
+
+
+@dataclass
+class NewsSummary:
+    """Resumo de notícias para um período/símbolo."""
+    symbol: str
+    period_start: datetime
+    period_end: datetime
+    
+    # Contagens
+    total_news: int = 0
+    high_impact: int = 0
+    
+    # Sentimento agregado
+    avg_sentiment: float = 0.0
+    sentiment_direction: str = "neutral"
+    
+    # Top notícias
+    top_bullish: List[NewsItem] = field(default_factory=list)
+    top_bearish: List[NewsItem] = field(default_factory=list)
+    
+    # Por categoria
+    by_category: Dict[str, int] = field(default_factory=dict)
+    
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            'symbol': self.symbol,
+            'period': f"{self.period_start.date()} - {self.period_end.date()}",
+            'total_news': self.total_news,
+            'high_impact': self.high_impact,
+            'avg_sentiment': round(self.avg_sentiment, 2),
+            'sentiment_direction': self.sentiment_direction,
+            'by_category': self.by_category,
+        }
 
 
 class NewsAnalyzer:
     """
-    Analisador de notícias financeiras
+    Analisador de notícias para trading.
     
-    Responsabilidades:
-    - Filtrar notícias relevantes
-    - Agrupar por tema/símbolo
-    - Identificar narrativas dominantes
-    - Estimar impacto no mercado
+    Funcionalidades:
+    - Categorização automática
+    - Análise de sentimento
+    - Extração de símbolos relevantes
+    - Resumos por período
     """
     
-    def __init__(self, config: Dict[str, Any] = None):
-        self._config = config or {}
+    def __init__(self):
+        self.logger = VirtusLogger.get_logger("news_analyzer")
         
-        # Palavras-chave por categoria
-        self._keywords = {
-            "bullish": [
-                "rally", "surge", "jump", "soar", "gain", "rise", "up",
-                "bullish", "optimistic", "growth", "strong", "beat", "exceed",
-                "hawkish", "recovery", "boom", "record high"
+        # Cache de notícias processadas
+        self._news_cache: Dict[str, NewsItem] = {}
+        self._cache_max_age = timedelta(hours=24)
+        
+        # Mapeamento de palavras-chave para símbolos
+        self._symbol_keywords = self._build_symbol_keywords()
+        
+        # Palavras para análise de sentimento
+        self._sentiment_words = self._build_sentiment_words()
+        
+        # Categorias de eventos
+        self._event_categories = self._build_event_categories()
+    
+    def _build_symbol_keywords(self) -> Dict[str, List[str]]:
+        """Constrói mapeamento de keywords para símbolos."""
+        return {
+            'XAUUSD': [
+                'gold', 'ouro', 'xau', 'bullion', 'precious metal',
+                'fed', 'inflation', 'dollar', 'treasury', 'haven',
+                'geopolitical', 'war', 'crisis', 'yields',
             ],
-            "bearish": [
-                "drop", "fall", "plunge", "crash", "decline", "down",
-                "bearish", "pessimistic", "weak", "miss", "disappoint",
-                "dovish", "recession", "crisis", "concern", "fear"
+            'EURUSD': [
+                'euro', 'eur', 'ecb', 'european central bank',
+                'eurozone', 'germany', 'france', 'draghi', 'lagarde',
+                'eu', 'european union', 'bundesbank',
             ],
-            "gold_bullish": [
-                "safe haven", "uncertainty", "geopolitical", "inflation",
-                "fear", "risk off", "dollar weakness", "rate cut"
+            'GBPUSD': [
+                'pound', 'sterling', 'gbp', 'boe', 'bank of england',
+                'uk', 'britain', 'brexit', 'british', 'london',
+                'bailey', 'ftse',
             ],
-            "gold_bearish": [
-                "risk on", "dollar strength", "rate hike", "taper",
-                "strong economy", "yield rise"
-            ]
+            'USD': [
+                'dollar', 'usd', 'fed', 'federal reserve', 'fomc',
+                'powell', 'treasury', 'us economy', 'american',
+                'nonfarm', 'payroll', 'cpi', 'ppi',
+            ],
         }
     
-    def analyze(
+    def _build_sentiment_words(self) -> Dict[str, List[str]]:
+        """Constrói dicionário de palavras para sentiment."""
+        return {
+            'very_bullish': [
+                'surge', 'soar', 'spike', 'boom', 'rally', 'jump',
+                'breakthrough', 'record high', 'explosive growth',
+                'strong beat', 'unexpected rise',
+            ],
+            'bullish': [
+                'rise', 'gain', 'increase', 'positive', 'improve',
+                'growth', 'advance', 'optimistic', 'bullish',
+                'support', 'upward', 'beat expectations',
+            ],
+            'bearish': [
+                'fall', 'drop', 'decline', 'negative', 'weak',
+                'concerns', 'pressure', 'bearish', 'downward',
+                'miss expectations', 'disappointing',
+            ],
+            'very_bearish': [
+                'crash', 'plunge', 'collapse', 'crisis', 'panic',
+                'recession', 'slump', 'meltdown', 'catastrophic',
+                'worst', 'historic low', 'massive selloff',
+            ],
+        }
+    
+    def _build_event_categories(self) -> Dict[NewsCategory, List[str]]:
+        """Constrói palavras para categorização."""
+        return {
+            NewsCategory.ECONOMIC_DATA: [
+                'gdp', 'cpi', 'ppi', 'nonfarm', 'employment',
+                'retail sales', 'manufacturing', 'pmi', 'ism',
+                'trade balance', 'inflation', 'unemployment',
+            ],
+            NewsCategory.CENTRAL_BANK: [
+                'fed', 'ecb', 'boe', 'fomc', 'rate decision',
+                'interest rate', 'monetary policy', 'hawkish',
+                'dovish', 'qe', 'taper', 'chairman', 'governor',
+            ],
+            NewsCategory.GEOPOLITICAL: [
+                'war', 'conflict', 'sanctions', 'election',
+                'political', 'trade war', 'tariff', 'summit',
+                'diplomacy', 'tension', 'crisis',
+            ],
+            NewsCategory.COMMODITY: [
+                'oil', 'gold', 'silver', 'copper', 'crude',
+                'opec', 'commodity', 'mining', 'energy',
+            ],
+        }
+    
+    async def analyze_news(
         self,
-        news_list: List[NewsItem],
-        symbol: Optional[str] = None
-    ) -> Dict[str, Any]:
+        news_data: List[Dict[str, Any]],
+        target_symbols: Optional[List[str]] = None
+    ) -> List[NewsItem]:
         """
-        Analisa lista de notícias
+        Analisa lista de notícias.
         
         Args:
-            news_list: Lista de notícias
-            symbol: Símbolo para análise específica
+            news_data: Dados brutos das notícias
+            target_symbols: Símbolos para filtrar relevância
             
         Returns:
-            Dict com análise completa
+            Lista de NewsItem processados
         """
-        if not news_list:
-            return self._empty_analysis()
+        target_symbols = target_symbols or ['XAUUSD', 'EURUSD', 'GBPUSD']
+        processed = []
         
-        # Filtrar por símbolo se especificado
-        if symbol:
-            news_list = [
-                n for n in news_list
-                if symbol in n.symbols or not n.symbols
-            ]
+        for raw_news in news_data:
+            try:
+                news_item = self._process_news(raw_news, target_symbols)
+                if news_item and news_item.relevance_score > 0.2:
+                    processed.append(news_item)
+                    self._news_cache[news_item.id] = news_item
+                    
+            except Exception as e:
+                self.logger.warning(f"Erro processando notícia: {e}")
+                continue
         
-        # Análise básica
-        analysis = {
-            "total_news": len(news_list),
-            "high_impact": len([n for n in news_list if n.impact == NewsImpact.HIGH]),
-            "medium_impact": len([n for n in news_list if n.impact == NewsImpact.MEDIUM]),
-            "low_impact": len([n for n in news_list if n.impact == NewsImpact.LOW]),
-            "timestamp": datetime.now().isoformat()
-        }
+        # Ordena por relevância
+        processed.sort(key=lambda x: x.relevance_score, reverse=True)
         
-        # Análise de sentimento agregado
-        sentiment_score, sentiment_direction = self._analyze_sentiment(news_list, symbol)
-        analysis["sentiment_score"] = sentiment_score
-        analysis["sentiment_direction"] = sentiment_direction.value if sentiment_direction else "neutral"
+        self.logger.info(f"Processadas {len(processed)} notícias relevantes")
+        return processed
+    
+    def _process_news(
+        self,
+        raw: Dict[str, Any],
+        target_symbols: List[str]
+    ) -> Optional[NewsItem]:
+        """Processa uma notícia individual."""
         
-        # Narrativas dominantes
-        analysis["dominant_themes"] = self._extract_themes(news_list)
+        # Extrai dados básicos
+        title = raw.get('title', '') or raw.get('headline', '')
+        description = raw.get('description', '') or raw.get('summary', '') or ''
         
-        # Notícias mais importantes
-        analysis["top_news"] = self._get_top_news(news_list, limit=5)
+        if not title:
+            return None
         
-        # Resumo textual
-        analysis["summary"] = self._generate_summary(news_list, symbol)
+        # Combina texto para análise
+        full_text = f"{title} {description}".lower()
         
-        # Bias de trading
-        analysis["trading_bias"] = self._calculate_trading_bias(
-            sentiment_score,
-            analysis["high_impact"]
+        # Identifica símbolos relevantes
+        symbols = self._identify_symbols(full_text, target_symbols)
+        
+        # Analisa sentimento
+        sentiment = self._analyze_sentiment(full_text)
+        
+        # Categoriza
+        category = self._categorize(full_text)
+        
+        # Determina impacto
+        impact = self._determine_impact(full_text, category)
+        
+        # Calcula relevância
+        relevance = self._calculate_relevance(
+            full_text, symbols, impact, target_symbols
         )
         
-        return analysis
+        # Parse da data
+        published_at = self._parse_date(raw.get('publishedAt') or raw.get('datetime'))
+        
+        return NewsItem(
+            id=raw.get('id', str(hash(title))),
+            title=title,
+            description=description[:500],
+            source=raw.get('source', {}).get('name', '') or raw.get('source', 'Unknown'),
+            url=raw.get('url', ''),
+            published_at=published_at,
+            impact=impact,
+            sentiment=sentiment,
+            category=category,
+            symbols=symbols,
+            keywords=self._extract_keywords(full_text),
+            relevance_score=relevance,
+            processed=True,
+            processed_at=datetime.now(),
+        )
     
-    def _empty_analysis(self) -> Dict[str, Any]:
-        """Retorna análise vazia"""
-        return {
-            "total_news": 0,
-            "high_impact": 0,
-            "medium_impact": 0,
-            "low_impact": 0,
-            "sentiment_score": 0.0,
-            "sentiment_direction": "neutral",
-            "dominant_themes": [],
-            "top_news": [],
-            "summary": "Sem notícias relevantes no momento.",
-            "trading_bias": "neutral",
-            "timestamp": datetime.now().isoformat()
+    def _identify_symbols(
+        self, text: str, target_symbols: List[str]
+    ) -> List[str]:
+        """Identifica símbolos mencionados no texto."""
+        found = []
+        
+        for symbol, keywords in self._symbol_keywords.items():
+            if symbol not in target_symbols and symbol != 'USD':
+                continue
+                
+            for keyword in keywords:
+                if keyword in text:
+                    if symbol not in found:
+                        found.append(symbol)
+                    break
+        
+        # Se menciona USD, afeta todos os pares
+        if 'USD' in found:
+            found.remove('USD')
+            for s in target_symbols:
+                if s not in found:
+                    found.append(s)
+        
+        return found
+    
+    def _analyze_sentiment(self, text: str) -> NewsSentiment:
+        """Analisa sentimento do texto."""
+        scores = {
+            'very_bullish': 0,
+            'bullish': 0,
+            'bearish': 0,
+            'very_bearish': 0,
         }
-    
-    def _analyze_sentiment(
-        self,
-        news_list: List[NewsItem],
-        symbol: Optional[str]
-    ) -> Tuple[float, Optional[SignalDirection]]:
-        """
-        Calcula sentimento agregado
         
-        Returns:
-            Tuple de (score -1 a 1, direção)
-        """
-        if not news_list:
-            return 0.0, None
+        for sentiment_type, words in self._sentiment_words.items():
+            for word in words:
+                if word in text:
+                    scores[sentiment_type] += 1
         
-        # Usar sentimento já calculado ou analisar texto
-        scores = []
+        # Calcula score final
+        final_score = (
+            scores['very_bullish'] * 2 + 
+            scores['bullish'] * 1 - 
+            scores['bearish'] * 1 - 
+            scores['very_bearish'] * 2
+        )
         
-        for news in news_list:
-            if news.sentiment != 0.0:
-                # Peso pelo impacto
-                weight = self._impact_weight(news.impact)
-                scores.append(news.sentiment * weight)
-            else:
-                # Análise por palavras-chave
-                text_score = self._analyze_text_sentiment(
-                    news.title + " " + news.summary,
-                    symbol
-                )
-                weight = self._impact_weight(news.impact)
-                scores.append(text_score * weight)
-        
-        if not scores:
-            return 0.0, None
-        
-        avg_score = sum(scores) / len(scores)
-        
-        # Determinar direção
-        if avg_score > 0.2:
-            direction = SignalDirection.BUY
-        elif avg_score < -0.2:
-            direction = SignalDirection.SELL
+        if final_score >= 3:
+            return NewsSentiment.VERY_BULLISH
+        elif final_score >= 1:
+            return NewsSentiment.BULLISH
+        elif final_score <= -3:
+            return NewsSentiment.VERY_BEARISH
+        elif final_score <= -1:
+            return NewsSentiment.BEARISH
         else:
-            direction = None
+            return NewsSentiment.NEUTRAL
+    
+    def _categorize(self, text: str) -> NewsCategory:
+        """Categoriza a notícia."""
+        max_matches = 0
+        best_category = NewsCategory.GENERAL
         
-        return round(avg_score, 3), direction
+        for category, keywords in self._event_categories.items():
+            matches = sum(1 for k in keywords if k in text)
+            if matches > max_matches:
+                max_matches = matches
+                best_category = category
+        
+        return best_category
     
-    def _impact_weight(self, impact: NewsImpact) -> float:
-        """Peso baseado no impacto"""
-        weights = {
-            NewsImpact.HIGH: 2.0,
-            NewsImpact.MEDIUM: 1.0,
-            NewsImpact.LOW: 0.5
-        }
-        return weights.get(impact, 1.0)
+    def _determine_impact(
+        self, text: str, category: NewsCategory
+    ) -> NewsImpact:
+        """Determina impacto da notícia."""
+        
+        # Palavras de alto impacto
+        critical_words = [
+            'emergency', 'crisis', 'war', 'recession', 
+            'collapse', 'rate decision', 'surprise', 'historic'
+        ]
+        
+        high_words = [
+            'fomc', 'fed', 'ecb', 'boe', 'nonfarm', 'cpi',
+            'gdp', 'rate hike', 'rate cut', 'inflation',
+        ]
+        
+        # Conta matches
+        critical_count = sum(1 for w in critical_words if w in text)
+        high_count = sum(1 for w in high_words if w in text)
+        
+        if critical_count >= 2:
+            return NewsImpact.CRITICAL
+        elif critical_count >= 1 or high_count >= 2:
+            return NewsImpact.HIGH
+        elif high_count >= 1 or category in [
+            NewsCategory.CENTRAL_BANK, 
+            NewsCategory.ECONOMIC_DATA
+        ]:
+            return NewsImpact.MEDIUM
+        else:
+            return NewsImpact.LOW
     
-    def _analyze_text_sentiment(
+    def _calculate_relevance(
         self,
         text: str,
-        symbol: Optional[str]
+        symbols: List[str],
+        impact: NewsImpact,
+        target_symbols: List[str]
     ) -> float:
-        """Análise simples de sentimento por palavras-chave"""
-        text_lower = text.lower()
+        """Calcula score de relevância."""
+        score = 0.0
         
-        # Contar palavras bullish/bearish
-        bullish_count = sum(1 for kw in self._keywords["bullish"] if kw in text_lower)
-        bearish_count = sum(1 for kw in self._keywords["bearish"] if kw in text_lower)
+        # Base: símbolos encontrados
+        symbol_match = len([s for s in symbols if s in target_symbols])
+        score += symbol_match * 0.3
         
-        # Para gold, usar keywords específicos
-        if symbol and "XAU" in symbol.upper():
-            bullish_count += sum(1 for kw in self._keywords["gold_bullish"] if kw in text_lower)
-            bearish_count += sum(1 for kw in self._keywords["gold_bearish"] if kw in text_lower)
-        
-        total = bullish_count + bearish_count
-        if total == 0:
-            return 0.0
-        
-        return (bullish_count - bearish_count) / total
-    
-    def _extract_themes(self, news_list: List[NewsItem]) -> List[str]:
-        """Extrai temas dominantes das notícias"""
-        theme_keywords = {
-            "Inflação": ["inflation", "cpi", "pce", "prices"],
-            "Taxa de Juros": ["rate", "fed", "fomc", "ecb", "boe", "monetary"],
-            "Emprego": ["jobs", "employment", "payroll", "unemployment", "labor"],
-            "Geopolítica": ["war", "conflict", "tension", "sanctions", "geopolitical"],
-            "Commodities": ["oil", "gold", "silver", "commodity", "crude"],
-            "Dólar": ["dollar", "usd", "dxy", "greenback"],
-            "Recessão": ["recession", "slowdown", "contraction", "gdp"],
-            "Tech/Ações": ["stocks", "equity", "nasdaq", "sp500", "tech"]
+        # Impacto
+        impact_scores = {
+            NewsImpact.LOW: 0.1,
+            NewsImpact.MEDIUM: 0.2,
+            NewsImpact.HIGH: 0.3,
+            NewsImpact.CRITICAL: 0.4,
         }
+        score += impact_scores.get(impact, 0.1)
         
-        theme_counts = Counter()
+        # Recência (penaliza notícias antigas)
+        # Aqui seria feito com base na data
         
-        for news in news_list:
-            text = (news.title + " " + news.summary).lower()
-            for theme, keywords in theme_keywords.items():
-                if any(kw in text for kw in keywords):
-                    theme_counts[theme] += 1
-        
-        # Top 3 temas
-        return [theme for theme, _ in theme_counts.most_common(3)]
+        return min(1.0, score)
     
-    def _get_top_news(
-        self,
-        news_list: List[NewsItem],
-        limit: int = 5
-    ) -> List[Dict[str, Any]]:
-        """Obtém notícias mais importantes"""
-        # Ordenar por impacto e data
-        sorted_news = sorted(
-            news_list,
-            key=lambda n: (
-                -self._impact_weight(n.impact),
-                -n.published_at.timestamp()
-            )
-        )
-        
-        return [
-            {
-                "title": n.title,
-                "source": n.source,
-                "impact": n.impact.value,
-                "published": n.published_at.isoformat()
-            }
-            for n in sorted_news[:limit]
+    def _extract_keywords(self, text: str) -> List[str]:
+        """Extrai palavras-chave do texto."""
+        # Palavras relevantes para trading
+        trading_words = [
+            'fed', 'ecb', 'boe', 'fomc', 'rate', 'inflation',
+            'gdp', 'cpi', 'employment', 'dollar', 'gold', 'euro',
+            'pound', 'bullish', 'bearish', 'rally', 'crash',
         ]
+        
+        found = []
+        for word in trading_words:
+            if word in text and word not in found:
+                found.append(word)
+        
+        return found[:10]  # Máximo 10 keywords
     
-    def _generate_summary(
+    def _parse_date(self, date_value: Any) -> datetime:
+        """Parse de diferentes formatos de data."""
+        if isinstance(date_value, datetime):
+            return date_value
+        
+        if isinstance(date_value, str):
+            try:
+                return datetime.fromisoformat(date_value.replace('Z', '+00:00'))
+            except:
+                pass
+            
+            try:
+                return datetime.strptime(date_value, '%Y-%m-%dT%H:%M:%S')
+            except:
+                pass
+        
+        return datetime.now()
+    
+    # ========================================================================
+    # SUMMARIES
+    # ========================================================================
+    
+    async def get_symbol_summary(
         self,
-        news_list: List[NewsItem],
-        symbol: Optional[str]
-    ) -> str:
-        """Gera resumo em português"""
-        if not news_list:
-            return "Sem notícias relevantes."
+        symbol: str,
+        news_items: Optional[List[NewsItem]] = None,
+        hours: int = 24
+    ) -> NewsSummary:
+        """
+        Gera resumo de notícias para um símbolo.
         
-        high_impact = [n for n in news_list if n.impact == NewsImpact.HIGH]
+        Args:
+            symbol: Símbolo (ex: XAUUSD)
+            news_items: Lista de notícias (usa cache se não fornecido)
+            hours: Período em horas
+            
+        Returns:
+            NewsSummary com análise agregada
+        """
+        now = datetime.now()
+        period_start = now - timedelta(hours=hours)
         
-        symbol_name = self._symbol_to_name(symbol) if symbol else "o mercado"
+        # Usa cache se não fornecido
+        if news_items is None:
+            news_items = [
+                n for n in self._news_cache.values()
+                if n.published_at >= period_start
+            ]
         
-        summary_parts = []
+        # Filtra por símbolo
+        relevant = [
+            n for n in news_items
+            if symbol in n.symbols or not n.symbols
+        ]
         
-        # Contagem
-        summary_parts.append(
-            f"Foram encontradas {len(news_list)} notícias relevantes para {symbol_name}"
-        )
-        
-        if high_impact:
-            summary_parts.append(
-                f", sendo {len(high_impact)} de alto impacto"
+        if not relevant:
+            return NewsSummary(
+                symbol=symbol,
+                period_start=period_start,
+                period_end=now,
             )
         
-        summary_parts.append(". ")
+        # Análises
+        sentiments = [n.sentiment.value for n in relevant]
+        avg_sentiment = sum(sentiments) / len(sentiments)
         
-        # Temas
-        themes = self._extract_themes(news_list)
-        if themes:
-            summary_parts.append(
-                f"Os principais temas são: {', '.join(themes)}. "
-            )
+        high_impact_count = len([
+            n for n in relevant 
+            if n.impact in [NewsImpact.HIGH, NewsImpact.CRITICAL]
+        ])
         
-        return "".join(summary_parts)
-    
-    def _symbol_to_name(self, symbol: str) -> str:
-        """Converte símbolo para nome legível"""
-        names = {
-            "XAUUSD": "Ouro (XAU/USD)",
-            "EURUSD": "Euro/Dólar (EUR/USD)",
-            "GBPUSD": "Libra/Dólar (GBP/USD)",
-            "USDJPY": "Dólar/Iene (USD/JPY)"
-        }
-        return names.get(symbol.upper(), symbol)
-    
-    def _calculate_trading_bias(
-        self,
-        sentiment_score: float,
-        high_impact_count: int
-    ) -> str:
-        """Calcula bias para trading"""
-        # Se há muitas notícias de alto impacto, cautela
-        if high_impact_count >= 3:
-            return "cautious"
-        
-        if sentiment_score > 0.3:
-            return "bullish"
-        elif sentiment_score < -0.3:
-            return "bearish"
+        # Categoriza direção
+        if avg_sentiment >= 1:
+            direction = "bullish"
+        elif avg_sentiment <= -1:
+            direction = "bearish"
         else:
-            return "neutral"
+            direction = "neutral"
+        
+        # Top notícias por sentimento
+        bullish_news = sorted(
+            [n for n in relevant if n.sentiment.value > 0],
+            key=lambda x: (x.sentiment.value, x.relevance_score),
+            reverse=True
+        )[:3]
+        
+        bearish_news = sorted(
+            [n for n in relevant if n.sentiment.value < 0],
+            key=lambda x: (abs(x.sentiment.value), x.relevance_score),
+            reverse=True
+        )[:3]
+        
+        # Contagem por categoria
+        by_category = defaultdict(int)
+        for n in relevant:
+            by_category[n.category.value] += 1
+        
+        return NewsSummary(
+            symbol=symbol,
+            period_start=period_start,
+            period_end=now,
+            total_news=len(relevant),
+            high_impact=high_impact_count,
+            avg_sentiment=avg_sentiment,
+            sentiment_direction=direction,
+            top_bullish=bullish_news,
+            top_bearish=bearish_news,
+            by_category=dict(by_category),
+        )
+    
+    async def get_daily_briefing(
+        self,
+        symbols: Optional[List[str]] = None
+    ) -> Dict[str, Any]:
+        """
+        Gera briefing diário de notícias.
+        
+        Returns:
+            Dict com resumo geral e por símbolo
+        """
+        symbols = symbols or ['XAUUSD', 'EURUSD', 'GBPUSD']
+        
+        briefing = {
+            'timestamp': datetime.now().isoformat(),
+            'period': '24h',
+            'summaries': {},
+            'highlights': [],
+            'overall_sentiment': 'neutral',
+        }
+        
+        all_news = list(self._news_cache.values())
+        sentiment_sum = 0
+        
+        for symbol in symbols:
+            summary = await self.get_symbol_summary(symbol, all_news)
+            briefing['summaries'][symbol] = summary.to_dict()
+            sentiment_sum += summary.avg_sentiment
+        
+        # Overall sentiment
+        if len(symbols) > 0:
+            avg = sentiment_sum / len(symbols)
+            if avg >= 0.5:
+                briefing['overall_sentiment'] = 'bullish'
+            elif avg <= -0.5:
+                briefing['overall_sentiment'] = 'bearish'
+        
+        # Highlights - notícias de maior impacto
+        highlights = sorted(
+            all_news,
+            key=lambda x: (
+                x.impact == NewsImpact.CRITICAL,
+                x.impact == NewsImpact.HIGH,
+                x.relevance_score
+            ),
+            reverse=True
+        )[:5]
+        
+        briefing['highlights'] = [n.to_dict() for n in highlights]
+        
+        return briefing
+    
+    # ========================================================================
+    # CACHE MANAGEMENT
+    # ========================================================================
+    
+    def clear_cache(self, older_than_hours: Optional[int] = None) -> int:
+        """Limpa cache de notícias."""
+        if older_than_hours is None:
+            count = len(self._news_cache)
+            self._news_cache.clear()
+            return count
+        
+        cutoff = datetime.now() - timedelta(hours=older_than_hours)
+        to_remove = [
+            k for k, v in self._news_cache.items()
+            if v.published_at < cutoff
+        ]
+        
+        for key in to_remove:
+            del self._news_cache[key]
+        
+        return len(to_remove)
+    
+    def get_cache_stats(self) -> Dict[str, Any]:
+        """Retorna estatísticas do cache."""
+        if not self._news_cache:
+            return {'count': 0}
+        
+        now = datetime.now()
+        items = list(self._news_cache.values())
+        
+        return {
+            'count': len(items),
+            'oldest': min(n.published_at for n in items).isoformat(),
+            'newest': max(n.published_at for n in items).isoformat(),
+            'by_impact': {
+                impact.value: len([n for n in items if n.impact == impact])
+                for impact in NewsImpact
+            },
+        }

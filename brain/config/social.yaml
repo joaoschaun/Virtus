@@ -1,0 +1,149 @@
+# ==============================================
+# VIRTUS Social Media Configuration
+# ==============================================
+# Configure integração com Instagram e agendamento
+
+social_media:
+  # Habilitar/desabilitar sistema
+  enabled: true
+  
+  # Modo de teste (não publica de verdade)
+  use_mock: true
+  
+  # Instagram Configuration
+  instagram:
+    # Meta Graph API credentials
+    # Para obter: https://developers.facebook.com/apps/
+    access_token: "${INSTAGRAM_ACCESS_TOKEN}"
+    account_id: "${INSTAGRAM_ACCOUNT_ID}"
+    page_id: "${FACEBOOK_PAGE_ID}"
+    api_version: "v18.0"
+    
+  # Agendamento
+  scheduling:
+    # Agendamento automático habilitado
+    auto_schedule: true
+    
+    # Intervalo mínimo entre posts (minutos)
+    min_interval: 30
+    
+    # Horários ótimos de publicação (UTC-3)
+    optimal_times:
+      - "07:30"  # Abertura mercados
+      - "09:00"
+      - "10:30"
+      - "12:00"  # Almoço
+      - "14:00"
+      - "16:00"
+      - "18:30"  # Engajamento social
+      - "20:00"
+      - "21:30"
+    
+    # Limites diários por tipo de post
+    daily_limits:
+      market_alert: 5
+      daily_summary: 1
+      news_highlight: 3
+      trading_tip: 2
+      educational: 2
+      technical: 3
+      weekly_outlook: 1
+      performance: 1
+  
+  # Conteúdo
+  content:
+    # Idioma dos posts
+    language: "pt-BR"
+    
+    # Username da conta (para menções)
+    username: "virtusinvestimentos"
+    
+    # Hashtags padrão (sempre incluídas)
+    base_hashtags:
+      - "VirtusInvestimentos"
+      - "Trading"
+      - "MercadoFinanceiro"
+    
+    # Hashtags por categoria
+    forex_hashtags:
+      - "Forex"
+      - "ForexTrader"
+      - "ForexTrading"
+      - "DayTrader"
+    
+    crypto_hashtags:
+      - "Crypto"
+      - "Bitcoin"
+      - "Criptomoedas"
+      - "CryptoTrading"
+    
+    gold_hashtags:
+      - "Gold"
+      - "Ouro"
+      - "XAUUSD"
+      - "Commodities"
+    
+    # Textos de chamada para ação
+    cta_texts:
+      - "Siga @virtusinvestimentos para mais análises!"
+      - "Acompanhe nosso perfil para atualizações em tempo real!"
+      - "Salve este post para consultar depois! 🔖"
+  
+  # Branding
+  branding:
+    # Nome da marca
+    name: "Virtus Investimentos"
+    
+    # Cores (hex)
+    colors:
+      primary: "#E53935"
+      secondary: "#FF5252"
+      dark_bg: "#0D0D0D"
+      dark_surface: "#1A1A1A"
+      card_bg: "#232323"
+      text_primary: "#FFFFFF"
+      text_secondary: "#B3B3B3"
+      success: "#4CAF50"
+      warning: "#FF9800"
+      danger: "#F44336"
+    
+    # Logos (relativos a frontend/public/)
+    logos:
+      symbol: "virtus-simbolo.png"
+      signature: "virtus-assinatura.png"
+      primary: "virtus-primaria.png"
+    
+    # Dimensões de imagem
+    image_dimensions:
+      instagram_square: [1080, 1080]
+      instagram_portrait: [1080, 1350]
+      instagram_landscape: [1080, 608]
+  
+  # Filtros de conteúdo
+  filters:
+    # Confiança mínima para publicar análise
+    min_confidence: 0.7
+    
+    # Impacto mínimo de notícia para publicar
+    min_news_impact: "high"  # low, medium, high, critical
+    
+    # Variação mínima de preço para alerta (%)
+    min_price_change: 1.0
+  
+  # Integração com Brain
+  brain_integration:
+    # Publicar alertas automáticos do Brain
+    auto_alerts: true
+    
+    # Publicar notícias de alto impacto
+    auto_news: true
+    
+    # Publicar resumo diário automático
+    auto_daily_summary: true
+    daily_summary_time: "07:30"
+    
+    # Símbolos monitorados para posts
+    monitored_symbols:
+      - "XAUUSD"
+      - "EURUSD"
+      - "GBPUSD"

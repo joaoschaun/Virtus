@@ -1,5 +1,15 @@
-# Bot Health Module
-from .health_monitor import HealthMonitor
-from .watchdog import Watchdog
+"""
+VIRTUS Bot Health Module
+========================
 
-__all__ = ['HealthMonitor', 'Watchdog']
+Monitoramento de saúde do bot.
+"""
+
+from .health_monitor import BotHealthMonitor, BotHealth, HealthCheck, HealthStatus
+
+__all__ = [
+    'BotHealthMonitor',
+    'BotHealth',
+    'HealthCheck',
+    'HealthStatus',
+]

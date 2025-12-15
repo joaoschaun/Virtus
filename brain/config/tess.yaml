@@ -1,0 +1,79 @@
+# VIRTUS - Configuração TESS AI
+# ================================
+# Plataforma de IA agregadora: https://tess.im/
+
+# Chave da API (obtida no painel TESS)
+api_key: "337520|MzMxArNQnQAcO0XBz7CLbraeV4lA7L6ep9sHITpt59a4b449"
+
+# URL base da API
+base_url: "https://tess.pareto.io/api"
+
+# ==================== DEFAULTS ====================
+
+# Modelo padrão para geração de texto
+default_model: "gpt-4o-mini"
+
+# Idioma padrão
+default_language: "Portuguese (Brazil)"
+
+# Temperatura padrão (0 = mais preciso, 1 = mais criativo)
+default_temperature: "0.5"
+
+# Timeout em segundos
+timeout_seconds: 60
+
+# ==================== LIMITES ====================
+
+# Limite de palavras padrão para captions
+caption_max_length: 300
+
+# Limite de palavras para posts LinkedIn
+linkedin_max_length: 400
+
+# Limite de palavras para resumos
+summary_max_length: 200
+
+# ==================== AGENTES PREFERIDOS ====================
+
+agents:
+  # Social Media
+  instagram_caption: 131
+  linkedin_post: 67
+  instagram_live: 76
+  instagram_reels: 183
+  
+  # Marketing
+  google_ads: 45
+  youtube_ads: 68
+  keywords: 60
+  email_sales: 53
+  
+  # Imagem
+  mockup_realistic: 153
+  pixar_style: 156
+  icons_3d: 159
+  logo: 155
+
+# ==================== MODELOS POR TAREFA ====================
+
+models:
+  # Geração de conteúdo rápido
+  fast: "gpt-4o-mini"
+  
+  # Conteúdo premium
+  premium: "gpt-4o"
+  
+  # Análise de sentimento (requer raciocínio)
+  sentiment: "deepseek-r1-small"
+  
+  # Geração de imagens
+  image: "stable-diffusion-3.5"
+
+# ==================== CUSTOS ESTIMADOS ====================
+# (para referência - valores em créditos TESS)
+
+estimated_credits:
+  instagram_caption: 0.06
+  linkedin_post: 0.07
+  sentiment_analysis: 0.10
+  image_generation: 0.50

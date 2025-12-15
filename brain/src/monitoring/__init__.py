@@ -1,16 +1,17 @@
 # Monitoring Module
-from .health_checker import (
-    HealthChecker,
-    AlertManager,
-    HealthStatus,
-    ComponentHealth,
-    SystemMetrics
-)
+from .metrics_collector import MetricsCollector, MetricType, TradingMetrics
+from .prometheus_exporter import PrometheusExporter, HealthAggregator
+from .alert_manager import AlertManager, Alert, AlertType, AlertPriority, AlertRule
 
 __all__ = [
-    'HealthChecker',
+    'MetricsCollector',
+    'MetricType',
+    'TradingMetrics',
+    'PrometheusExporter',
+    'HealthAggregator',
     'AlertManager',
-    'HealthStatus',
-    'ComponentHealth',
-    'SystemMetrics'
+    'Alert',
+    'AlertType',
+    'AlertPriority',
+    'AlertRule',
 ]

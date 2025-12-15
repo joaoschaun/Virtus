@@ -1,0 +1,28 @@
+[
+  {
+    "id": 1,
+    "type": "news_auto",
+    "title": "Decisão de Juros do COPOM",
+    "caption": "📰 NOTÍCIA DO MERCADO\n\nDecisão de Juros do COPOM\n\nBanco Central divulga decisão sobre taxa Selic.\n\n⚪ Impacto a ser avaliado.\n\n\n🔔 Acompanhe a Virtus para análises em tempo real!\n\n#VirtusInvestimentos #Trading #MercadoFinanceiro #Notícias #MercadoHoje #Economia",
+    "image_file": "news_Decisão_de_Juros_do_COPOM_20251214_042005.png",
+    "source": "Calendário Econômico",
+    "sentiment": "neutral",
+    "category": "economy",
+    "created_at": "2025-12-14T04:20:05.566239",
+    "posted": false,
+    "auto_generated": true
+  },
+  {
+    "id": 2,
+    "type": "news_auto",
+    "title": "Dados de Inflação nos EUA",
+    "caption": "📰 NOTÍCIA DO MERCADO\n\nDados de Inflação nos EUA\n\nCPI americano impacta mercados globais.\n\n⚪ Impacto a ser avaliado.\n\n\n🔔 Acompanhe a Virtus para análises em tempo real!\n\n#VirtusInvestimentos #Trading #MercadoFinanceiro #Notícias #MercadoHoje #Economia",
+    "image_file": "news_Dados_de_Inflação_nos_EUA_20251214_042005.png",
+    "source": "Calendário Econômico",
+    "sentiment": "neutral",
+    "category": "economy",
+    "created_at": "2025-12-14T04:20:05.616173",
+    "posted": false,
+    "auto_generated": true
+  }
+]

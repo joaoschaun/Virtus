@@ -1,5 +1,24 @@
-# Correlation Analysis Module
-from .correlation_analyzer import CorrelationAnalyzer
-from .cross_asset_analyzer import CrossAssetAnalyzer
+"""
+VIRTUS Correlation Analysis Module
+===================================
 
-__all__ = ['CorrelationAnalyzer', 'CrossAssetAnalyzer']
+Análise de correlações entre instrumentos.
+"""
+
+from .correlation_analyzer import (
+    CorrelationAnalyzer,
+    CorrelationStrength,
+    CorrelationRegime,
+    PairCorrelation,
+    DXYCorrelation,
+    CorrelationAnalysisResult,
+)
+
+__all__ = [
+    'CorrelationAnalyzer',
+    'CorrelationStrength',
+    'CorrelationRegime',
+    'PairCorrelation',
+    'DXYCorrelation',
+    'CorrelationAnalysisResult',
+]

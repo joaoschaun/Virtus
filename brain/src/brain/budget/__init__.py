@@ -1,6 +1,11 @@
-# Brain Budget Module
-from .budget_manager import BudgetManager
-from .budget_state import BudgetState
-from .rate_limiter import RateLimiter
+"""
+VIRTUS Brain - Budget Module
+"""
 
-__all__ = ['BudgetManager', 'BudgetState', 'RateLimiter']
+from .budget_manager import BudgetManager, ProviderBudget, get_budget_manager
+
+__all__ = [
+    'BudgetManager',
+    'ProviderBudget',
+    'get_budget_manager',
+]

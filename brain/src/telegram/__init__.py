@@ -1,5 +1,13 @@
-# Telegram Module
-from .telegram_service import TelegramService, get_telegram_service
-from .message_router import MessageRouter
+"""
+VIRTUS Telegram Module
+======================
 
-__all__ = ['TelegramService', 'get_telegram_service', 'MessageRouter']
+Integração com Telegram para notificações e comandos.
+"""
+
+from .telegram_service import TelegramService, get_telegram
+
+__all__ = [
+    'TelegramService',
+    'get_telegram',
+]

@@ -1,14 +1,25 @@
-# Position Supervisor Module
+"""VIRTUS Position Supervisor Module
+==================================
+
+Monitoramento em tempo real de posições.
+"""
+
 from .position_supervisor import (
     PositionSupervisor,
-    TrailingConfig,
-    TrailingMethod,
-    PositionStats
+    PositionHealth,
+    BreakEvenConfig,
+    PositionInfo,
+    SupervisorAlert,
+    AlertType,
+    HedgeInfo,
 )
 
 __all__ = [
     'PositionSupervisor',
-    'TrailingConfig',
-    'TrailingMethod',
-    'PositionStats'
+    'PositionHealth',
+    'BreakEvenConfig',
+    'PositionInfo',
+    'SupervisorAlert',
+    'AlertType',
+    'HedgeInfo',
 ]

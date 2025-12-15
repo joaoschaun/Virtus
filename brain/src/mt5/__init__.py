@@ -1,17 +1,19 @@
-# MT5 Module
-from .mt5_manager import MT5Manager, get_mt5_manager
-from .data_feed import MT5DataFeed, TickData, BarData, create_datafeed
-from .order_manager import OrderManager, OrderRequest, OrderResult, create_order_manager
+"""
+VIRTUS MT5 Module
+==================
+
+Interface com MetaTrader 5 para trading.
+"""
+
+from .mt5_connection import MT5Connection, get_mt5_connection
+from .mt5_data import MT5DataService, get_mt5_data
+from .mt5_orders import MT5OrderManager, get_mt5_orders
 
 __all__ = [
-    'MT5Manager',
-    'get_mt5_manager',
-    'MT5DataFeed',
-    'TickData',
-    'BarData',
-    'create_datafeed',
-    'OrderManager',
-    'OrderRequest',
-    'OrderResult',
-    'create_order_manager'
+    'MT5Connection',
+    'get_mt5_connection',
+    'MT5DataService',
+    'get_mt5_data',
+    'MT5OrderManager',
+    'get_mt5_orders',
 ]

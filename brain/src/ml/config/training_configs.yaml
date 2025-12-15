@@ -1,0 +1,220 @@
+# =========================================================
+# VIRTUS ML - Configuração de Treinamento
+# =========================================================
+
+training:
+  # =====================================================
+  # Configuração Geral
+  # =====================================================
+  general:
+    seed: 42
+    deterministic: true
+    num_workers: 4
+    pin_memory: true
+    mixed_precision: true  # FP16 para acelerar treino
+    
+  # =====================================================
+  # Data Split
+  # =====================================================
+  data_split:
+    method: "temporal"  # random, temporal, walk_forward, purged_kfold
+    train_ratio: 0.7
+    validation_ratio: 0.15
+    test_ratio: 0.15
+    shuffle: false  # Manter ordem temporal para dados financeiros
+    
+    # Walk-forward específico
+    walk_forward:
+      train_window: 252  # ~1 ano de dias de trading
+      test_window: 63    # ~3 meses
+      step_size: 21      # ~1 mês
+      
+    # Purged K-Fold específico
+    purged_kfold:
+      n_splits: 5
+      embargo_pct: 0.01  # Gap entre treino e teste
+
+  # =====================================================
+  # Otimização de Hiperparâmetros
+  # =====================================================
+  hyperparameter_optimization:
+    enabled: true
+    method: "optuna"  # grid_search, random_search, bayesian, optuna
+    n_trials: 50
+    timeout_hours: 24
+    
+    # Métricas para otimização
+    optimize_metric: "sharpe_ratio"  # accuracy, f1, sharpe_ratio, profit_factor
+    direction: "maximize"
+    
+    # Espaço de busca LSTM
+    lstm_search_space:
+      hidden_units:
+        type: "categorical"
+        choices: [[64, 32], [128, 64], [128, 64, 32], [256, 128, 64]]
+      dropout:
+        type: "float"
+        low: 0.1
+        high: 0.5
+        step: 0.1
+      learning_rate:
+        type: "loguniform"
+        low: 0.0001
+        high: 0.01
+      batch_size:
+        type: "categorical"
+        choices: [16, 32, 64, 128]
+      sequence_length:
+        type: "categorical"
+        choices: [30, 60, 90, 120]
+    
+    # Espaço de busca k-NN
+    knn_search_space:
+      n_neighbors:
+        type: "int"
+        low: 3
+        high: 15
+      weights:
+        type: "categorical"
+        choices: ["uniform", "distance"]
+      metric:
+        type: "categorical"
+        choices: ["euclidean", "manhattan", "cosine"]
+    
+    # Espaço de busca CNN
+    cnn_search_space:
+      backbone:
+        type: "categorical"
+        choices: ["mobilenet", "resnet", "custom"]
+      learning_rate:
+        type: "loguniform"
+        low: 0.00001
+        high: 0.001
+      batch_size:
+        type: "categorical"
+        choices: [8, 16, 32]
+
+  # =====================================================
+  # Validação Cruzada
+  # =====================================================
+  cross_validation:
+    enabled: true
+    method: "time_series_cv"  # kfold, stratified_kfold, time_series_cv, combinatorial_purged
+    n_splits: 5
+    
+    # Time Series CV específico
+    time_series_cv:
+      max_train_size: null  # None = use all available
+      gap: 0  # Gap entre treino e validação
+      
+    # Combinatorial Purged específico (para backtesting)
+    combinatorial_purged:
+      n_test_splits: 2
+      embargo_td: 5  # Dias de embargo
+
+  # =====================================================
+  # Early Stopping
+  # =====================================================
+  early_stopping:
+    enabled: true
+    monitor: "val_loss"
+    patience: 10
+    min_delta: 0.0001
+    mode: "min"  # min para loss, max para accuracy
+    restore_best_weights: true
+
+  # =====================================================
+  # Learning Rate Scheduling
+  # =====================================================
+  lr_scheduler:
+    enabled: true
+    type: "reduce_on_plateau"  # step, exponential, cosine, reduce_on_plateau, one_cycle
+    
+    reduce_on_plateau:
+      factor: 0.5
+      patience: 5
+      min_lr: 0.000001
+      
+    cosine:
+      T_max: 100
+      eta_min: 0.000001
+      
+    one_cycle:
+      max_lr: 0.01
+      pct_start: 0.3
+      div_factor: 25.0
+
+  # =====================================================
+  # Checkpointing
+  # =====================================================
+  checkpointing:
+    enabled: true
+    save_dir: "models/checkpoints"
+    save_top_k: 3
+    monitor: "val_loss"
+    mode: "min"
+    save_last: true
+    save_on_train_epoch_end: false
+    every_n_epochs: 1
+
+  # =====================================================
+  # Logging & Monitoring
+  # =====================================================
+  logging:
+    log_every_n_steps: 10
+    log_graph: true
+    
+    # TensorBoard
+    tensorboard:
+      enabled: true
+      log_dir: "logs/tensorboard"
+      
+    # Weights & Biases (opcional)
+    wandb:
+      enabled: false
+      project: "virtus-ml"
+      entity: null
+
+  # =====================================================
+  # Retreino Automático
+  # =====================================================
+  auto_retrain:
+    enabled: true
+    
+    # Triggers para retreino
+    triggers:
+      # Baseado em tempo
+      max_age_days: 30
+      
+      # Baseado em performance
+      min_accuracy: 0.55
+      min_sharpe_ratio: 0.5
+      max_drawdown_pct: 20.0
+      
+      # Baseado em drift
+      concept_drift_threshold: 0.1
+      data_drift_threshold: 0.15
+    
+    # Configuração do retreino
+    retrain_on_trigger: true
+    use_recent_data_only: true
+    recent_data_days: 90
+    keep_previous_model: true
+
+  # =====================================================
+  # Recursos Computacionais
+  # =====================================================
+  resources:
+    # GPU
+    gpus: "auto"  # auto, 0, 1, [0,1], null
+    accelerator: "auto"  # auto, gpu, tpu, cpu
+    
+    # Multi-processing
+    strategy: "auto"  # auto, ddp, dp, deepspeed
+    
+    # Limites
+    max_epochs: 200
+    max_time: "24:00:00"  # HH:MM:SS
+    
+    # Gradient Accumulation (para batch grande em GPU pequena)
+    accumulate_grad_batches: 1

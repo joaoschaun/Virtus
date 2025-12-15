@@ -1,244 +1,284 @@
 """
-BRAIN - Módulo de Configuração
-Carrega e gerencia todas as configurações do sistema
+VIRTUS Core - Módulo de Configuração
+====================================
+
+Carregamento e gerenciamento de configurações YAML.
 """
 
 import os
 import yaml
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Dict, Any, Optional, List
 from dataclasses import dataclass, field
+from functools import lru_cache
 
-
-# Diretório base do projeto
-BASE_DIR = Path(__file__).resolve().parent.parent.parent
-CONFIG_DIR = BASE_DIR / "config"
+from .types import RiskConfig  # Usar RiskConfig de types.py
 
 
 @dataclass
 class MT5Config:
     """Configuração do MetaTrader 5"""
     path: str
-    login: Optional[int] = None
-    password: Optional[str] = None
-    server: Optional[str] = None
+    login: int
+    password: str
+    server: str
     timeout: int = 60000
-    portable: bool = False
+    retries: int = 3
+    retry_delay: int = 5
+
+
+@dataclass
+class TelegramConfig:
+    """Configuração do Telegram"""
+    bot_token: str = ""
+    chat_id: str = ""
+    enabled: bool = True
+    notifications: Dict[str, bool] = field(default_factory=lambda: {
+        'trades': True,
+        'alerts': True,
+        'daily_report': True,
+        'errors': True
+    })
     
-    def __post_init__(self):
-        # Carregar de variáveis de ambiente se não definido
-        self.login = self.login or os.getenv("MT5_LOGIN")
-        self.password = self.password or os.getenv("MT5_PASSWORD")
-        self.server = self.server or os.getenv("MT5_SERVER")
-        
-        if self.login:
-            self.login = int(self.login)
+    @property
+    def token(self) -> str:
+        """Alias para bot_token"""
+        return self.bot_token
 
 
 @dataclass
-class RiskConfig:
-    """Configuração de risco global"""
-    max_total_positions: int = 6
-    max_daily_loss_usd: float = 500.0
-    max_daily_loss_percent: float = 5.0
-    max_drawdown_percent: float = 10.0
-    correlation_limit: float = 0.7
+class APIKeysConfig:
+    """Configuração das API Keys"""
+    forexnews: str = ""
+    finnhub: str = ""
+    finazon: str = ""
+    twelvedata: str = ""
+    financialmodelingprep: str = ""
+    
+    @property
+    def fmp(self) -> str:
+        """Alias para financialmodelingprep"""
+        return self.financialmodelingprep
 
 
 @dataclass
-class LocalizationConfig:
-    """Configuração de localização"""
+class AdvisorConfig:
+    """Configuração do Advisor (Relatórios)"""
+    enabled: bool = True
     language: str = "pt-BR"
     timezone: str = "America/Sao_Paulo"
-    date_format: str = "%d/%m/%Y"
-    time_format: str = "%H:%M:%S"
-
-
-@dataclass
-class LoggingConfig:
-    """Configuração de logging"""
-    level: str = "INFO"
-    file_rotation: str = "daily"
-    max_files: int = 30
-    format: str = "%(asctime)s | %(levelname)-8s | %(name)s | %(message)s"
-
-
-@dataclass
-class ReportingConfig:
-    """Configuração de relatórios"""
-    daily_briefing_enabled: bool = True
-    daily_briefing_hour: int = 7
-    daily_briefing_minute: int = 30
-    weekly_report_enabled: bool = True
-    weekly_report_day: str = "monday"
-    weekly_report_hour: int = 8
+    daily_briefing: Dict[str, Any] = field(default_factory=dict)
+    news: Dict[str, Any] = field(default_factory=dict)
+    sentiment: Dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass
 class BotConfig:
-    """Configuração de um bot individual"""
+    """Configuração de um Bot individual"""
     id: str
     name: str
     symbol: str
-    enabled: bool = True
-    description: str = ""
+    enabled: bool
+    priority: str
+    config_file: str
+    
+    # Intervalo de análise em segundos
+    analysis_interval: float = 5.0
+    
+    # Estratégias
     strategies: Dict[str, Any] = field(default_factory=dict)
+    
+    # Risco
     risk: Dict[str, Any] = field(default_factory=dict)
+    
+    # Posições
     positions: Dict[str, Any] = field(default_factory=dict)
+    
+    # ML
     ml: Dict[str, Any] = field(default_factory=dict)
+    
+    # Análise
     analysis: Dict[str, Any] = field(default_factory=dict)
+    
+    # Brain
     brain: Dict[str, Any] = field(default_factory=dict)
-    schedule: Dict[str, Any] = field(default_factory=dict)
-    
-    @classmethod
-    def from_yaml(cls, filepath: Path) -> "BotConfig":
-        """Carrega configuração de bot de arquivo YAML"""
-        with open(filepath, "r", encoding="utf-8") as f:
-            data = yaml.safe_load(f)
-        
-        bot_data = data.get("bot", {})
-        return cls(
-            id=bot_data.get("id", "unknown"),
-            name=bot_data.get("name", "Unknown Bot"),
-            symbol=bot_data.get("symbol", ""),
-            enabled=bot_data.get("enabled", True),
-            description=bot_data.get("description", ""),
-            strategies=data.get("strategies", {}),
-            risk=data.get("risk", {}),
-            positions=data.get("positions", {}),
-            ml=data.get("ml", {}),
-            analysis=data.get("analysis", {}),
-            brain=data.get("brain", {}),
-            schedule=data.get("schedule", {})
-        )
-
-
-@dataclass
-class BrainConfig:
-    """Configuração do Brain Service"""
-    cache: Dict[str, Any] = field(default_factory=dict)
-    budget: Dict[str, Any] = field(default_factory=dict)
-    providers: Dict[str, Any] = field(default_factory=dict)
-    analyzers: Dict[str, Any] = field(default_factory=dict)
-    symbols: Dict[str, Any] = field(default_factory=dict)
-    
-    @classmethod
-    def from_yaml(cls, filepath: Path) -> "BrainConfig":
-        """Carrega configuração do Brain de arquivo YAML"""
-        with open(filepath, "r", encoding="utf-8") as f:
-            data = yaml.safe_load(f)
-        
-        return cls(
-            cache=data.get("cache", {}),
-            budget=data.get("budget", {}),
-            providers=data.get("providers", {}),
-            analyzers=data.get("analyzers", {}),
-            symbols=data.get("symbols", {})
-        )
 
 
 class Config:
     """
-    Gerenciador central de configurações
+    Gerenciador de Configuração Principal
     
-    Singleton que carrega e disponibiliza todas as configurações do sistema.
+    Carrega e gerencia todas as configurações do sistema VIRTUS.
     """
     
-    _instance: Optional["Config"] = None
+    _instance: Optional['Config'] = None
     
-    def __new__(cls):
+    def __new__(cls, config_path: Optional[str] = None):
         if cls._instance is None:
             cls._instance = super().__new__(cls)
             cls._instance._initialized = False
         return cls._instance
     
-    def __init__(self):
+    def __init__(self, config_path: Optional[str] = None):
         if self._initialized:
             return
             
         self._initialized = True
-        self._config_data: Dict[str, Any] = {}
-        self._bot_configs: Dict[str, BotConfig] = {}
-        self._brain_config: Optional[BrainConfig] = None
+        
+        # Determinar caminho do config
+        if config_path:
+            self.config_path = Path(config_path)
+        else:
+            self.config_path = Path(__file__).parent.parent.parent / "config"
         
         # Carregar configurações
-        self._load_main_config()
-        self._load_brain_config()
-        self._load_bot_configs()
+        self._raw_config: Dict[str, Any] = {}
+        self._brain_config: Dict[str, Any] = {}
+        self._bot_configs: Dict[str, BotConfig] = {}
+        
+        self._load_configs()
     
-    def _load_main_config(self):
-        """Carrega configuração principal"""
-        config_path = CONFIG_DIR / "config.yaml"
-        if config_path.exists():
-            with open(config_path, "r", encoding="utf-8") as f:
-                self._config_data = yaml.safe_load(f)
+    def _load_configs(self) -> None:
+        """Carrega todos os arquivos de configuração"""
+        # Config principal
+        main_config_path = self.config_path / "config.yaml"
+        if main_config_path.exists():
+            with open(main_config_path, 'r', encoding='utf-8') as f:
+                self._raw_config = yaml.safe_load(f)
+        
+        # Config do Brain
+        brain_config_path = self.config_path / "brain.yaml"
+        if brain_config_path.exists():
+            with open(brain_config_path, 'r', encoding='utf-8') as f:
+                self._brain_config = yaml.safe_load(f)
+        
+        # Configs dos bots
+        bots_path = self.config_path / "bots"
+        if bots_path.exists():
+            for bot_file in bots_path.glob("*.yaml"):
+                with open(bot_file, 'r', encoding='utf-8') as f:
+                    bot_data = yaml.safe_load(f)
+                    if bot_data and 'bot' in bot_data:
+                        bot_info = bot_data['bot']
+                        bot_config = BotConfig(
+                            id=bot_info.get('id', bot_file.stem),
+                            name=bot_info.get('name', ''),
+                            symbol=bot_info.get('symbol', ''),
+                            enabled=bot_info.get('enabled', False),
+                            priority=bot_info.get('priority', 'normal'),
+                            config_file=str(bot_file),
+                            analysis_interval=bot_info.get('analysis_interval', 5.0),
+                            strategies=bot_data.get('strategies', {}),
+                            risk=bot_data.get('risk', {}),
+                            positions=bot_data.get('positions', {}),
+                            ml=bot_data.get('ml', {}),
+                            analysis=bot_data.get('analysis', {}),
+                            brain=bot_data.get('brain', {})
+                        )
+                        self._bot_configs[bot_config.id] = bot_config
     
-    def _load_brain_config(self):
-        """Carrega configuração do Brain"""
-        brain_path = CONFIG_DIR / "brain.yaml"
-        if brain_path.exists():
-            self._brain_config = BrainConfig.from_yaml(brain_path)
+    @classmethod
+    def from_yaml(cls, config_path: str) -> 'Config':
+        """Carrega configuração de um arquivo YAML."""
+        # Reset singleton para permitir novo caminho
+        cls._instance = None
+        # from_yaml recebe o path do arquivo, não do diretório
+        # Extrair o diretório pai do arquivo config
+        config_dir = str(Path(config_path).parent)
+        return cls(config_dir)
     
-    def _load_bot_configs(self):
-        """Carrega configurações de todos os bots"""
-        bots_dir = CONFIG_DIR / "bots"
-        if bots_dir.exists():
-            for yaml_file in bots_dir.glob("*.yaml"):
-                bot_config = BotConfig.from_yaml(yaml_file)
-                self._bot_configs[bot_config.id] = bot_config
+    def reload(self) -> None:
+        """Recarrega todas as configurações"""
+        self._load_configs()
     
-    # === Propriedades de acesso ===
-    
-    @property
-    def system(self) -> Dict[str, Any]:
-        """Configuração do sistema"""
-        return self._config_data.get("system", {})
+    # ========== Propriedades de Acesso ==========
     
     @property
     def mt5(self) -> MT5Config:
-        """Configuração do MT5"""
-        mt5_data = self._config_data.get("mt5", {})
-        return MT5Config(**mt5_data)
+        """Retorna configuração do MT5"""
+        mt5_data = self._raw_config.get('mt5', {})
+        return MT5Config(
+            path=mt5_data.get('path', ''),
+            login=mt5_data.get('login', 0),
+            password=mt5_data.get('password', ''),
+            server=mt5_data.get('server', ''),
+            timeout=mt5_data.get('timeout', 60000),
+            retries=mt5_data.get('retries', 3),
+            retry_delay=mt5_data.get('retry_delay', 5)
+        )
+    
+    @property
+    def telegram(self) -> TelegramConfig:
+        """Retorna configuração do Telegram"""
+        tg_data = self._raw_config.get('telegram', {})
+        return TelegramConfig(
+            bot_token=tg_data.get('bot_token', ''),
+            chat_id=tg_data.get('chat_id', ''),
+            enabled=tg_data.get('enabled', True),
+            notifications=tg_data.get('notifications', {})
+        )
+    
+    @property
+    def api_keys(self) -> APIKeysConfig:
+        """Retorna API Keys"""
+        keys = self._raw_config.get('api_keys', {})
+        return APIKeysConfig(
+            forexnews=keys.get('forexnews', ''),
+            finnhub=keys.get('finnhub', ''),
+            finazon=keys.get('finazon', ''),
+            twelvedata=keys.get('twelvedata', ''),
+            financialmodelingprep=keys.get('financialmodelingprep', '')
+        )
     
     @property
     def risk(self) -> RiskConfig:
-        """Configuração de risco global"""
-        risk_data = self._config_data.get("risk", {})
-        return RiskConfig(**{k: v for k, v in risk_data.items() if k in RiskConfig.__dataclass_fields__})
+        """Retorna configuração de risco global"""
+        risk_data = self._raw_config.get('risk', {})
+        return RiskConfig(
+            max_daily_loss_pct=risk_data.get('max_daily_loss_pct', risk_data.get('max_daily_loss_usd', 500.0) / 100),
+            max_weekly_loss_pct=risk_data.get('max_weekly_loss_pct', 10.0),
+            max_drawdown=risk_data.get('max_drawdown_percent', risk_data.get('max_drawdown', 10.0)),
+            max_total_exposure=risk_data.get('max_total_exposure', risk_data.get('max_exposure_percent', 30.0) / 10),
+            max_symbol_exposure=risk_data.get('max_symbol_exposure', 1.0),
+            max_correlated_exposure=risk_data.get('max_correlated_exposure', risk_data.get('correlation_limit', 0.7) * 3),
+            max_positions=risk_data.get('max_positions', risk_data.get('max_total_positions', 6)),
+            risk_per_trade=risk_data.get('risk_per_trade', 1.0),
+            max_position_size=risk_data.get('max_position_size', 1.0),
+            min_risk_reward=risk_data.get('min_risk_reward', 1.5),
+            use_trailing_stop=risk_data.get('use_trailing_stop', True),
+            trailing_stop_pips=risk_data.get('trailing_stop_pips', 20.0),
+            break_even_pips=risk_data.get('break_even_pips', 15.0),
+        )
     
     @property
-    def localization(self) -> LocalizationConfig:
-        """Configuração de localização"""
-        loc_data = self._config_data.get("localization", {})
-        return LocalizationConfig(**loc_data)
+    def advisor(self) -> AdvisorConfig:
+        """Retorna configuração do Advisor"""
+        adv_data = self._raw_config.get('advisor', {})
+        return AdvisorConfig(
+            enabled=adv_data.get('enabled', True),
+            language=adv_data.get('language', 'pt-BR'),
+            timezone=adv_data.get('timezone', 'America/Sao_Paulo'),
+            daily_briefing=adv_data.get('daily_briefing', {}),
+            news=adv_data.get('news', {}),
+            sentiment=adv_data.get('sentiment', {})
+        )
     
     @property
-    def logging(self) -> LoggingConfig:
-        """Configuração de logging"""
-        log_data = self._config_data.get("logging", {})
-        return LoggingConfig(**log_data)
+    def symbols(self) -> List[str]:
+        """Retorna lista de símbolos habilitados"""
+        return self._raw_config.get('symbols', {}).get('enabled', [])
     
     @property
-    def brain(self) -> BrainConfig:
-        """Configuração do Brain Service"""
+    def brain_config(self) -> Dict[str, Any]:
+        """Retorna configuração completa do Brain"""
         return self._brain_config
     
     @property
-    def enabled_bots(self) -> List[str]:
-        """Lista de IDs dos bots habilitados"""
-        return self._config_data.get("bots", {}).get("enabled", [])
+    def data_dir(self) -> str:
+        """Retorna diretório de dados"""
+        return str(self.config_path.parent / "data")
     
-    @property
-    def trading_interval(self) -> int:
-        """Intervalo de trading em segundos"""
-        return self._config_data.get("bots", {}).get("trading_interval", 5)
-    
-    @property
-    def position_check_interval(self) -> int:
-        """Intervalo de verificação de posições em segundos"""
-        return self._config_data.get("bots", {}).get("position_check_interval", 2)
-    
-    # === Métodos de acesso a bots ===
+    # ========== Métodos de Bot ==========
     
     def get_bot_config(self, bot_id: str) -> Optional[BotConfig]:
         """Retorna configuração de um bot específico"""
@@ -248,40 +288,47 @@ class Config:
         """Retorna todas as configurações de bots"""
         return self._bot_configs
     
-    def get_enabled_bot_configs(self) -> List[BotConfig]:
-        """Retorna configurações apenas dos bots habilitados"""
-        return [
-            self._bot_configs[bot_id] 
-            for bot_id in self.enabled_bots 
-            if bot_id in self._bot_configs and self._bot_configs[bot_id].enabled
-        ]
+    def get_enabled_bots(self) -> List[BotConfig]:
+        """Retorna apenas bots habilitados"""
+        return [bot for bot in self._bot_configs.values() if bot.enabled]
     
-    # === Métodos de acesso genérico ===
+    @property
+    def bots(self) -> List[BotConfig]:
+        """Retorna lista de todos os bots configurados"""
+        return list(self._bot_configs.values())
+    
+    # ========== Métodos Utilitários ==========
     
     def get(self, key: str, default: Any = None) -> Any:
         """Acesso genérico a configurações"""
-        keys = key.split(".")
-        value = self._config_data
+        keys = key.split('.')
+        value = self._raw_config
         for k in keys:
             if isinstance(value, dict):
                 value = value.get(k)
             else:
                 return default
-            if value is None:
-                return default
-        return value
+        return value if value is not None else default
     
-    def reload(self):
-        """Recarrega todas as configurações"""
-        self._initialized = False
-        self.__init__()
+    def get_brain(self, key: str, default: Any = None) -> Any:
+        """Acesso a configurações do Brain"""
+        keys = key.split('.')
+        value = self._brain_config
+        for k in keys:
+            if isinstance(value, dict):
+                value = value.get(k)
+            else:
+                return default
+        return value if value is not None else default
 
 
-def load_config() -> Config:
-    """Função helper para carregar configuração"""
-    return Config()
-
-
-def get_config() -> Config:
+# Função helper para obter config global
+@lru_cache(maxsize=1)
+def get_config(config_path: Optional[str] = None) -> Config:
     """Retorna instância singleton da configuração"""
-    return Config()
+    return Config(config_path)
+
+
+def load_config(config_path: Optional[str] = None) -> Config:
+    """Carrega e retorna configuração (alias para get_config)"""
+    return get_config(config_path)

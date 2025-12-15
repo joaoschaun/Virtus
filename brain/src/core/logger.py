@@ -1,196 +1,261 @@
 """
-BRAIN - Módulo de Logging
-Sistema de logging centralizado com suporte a múltiplos bots
+VIRTUS Core - Sistema de Logging
+================================
+
+Logger configurável por módulo/bot com suporte a arquivos e console.
 """
 
-import logging
+import os
 import sys
-from datetime import datetime
+import logging
 from pathlib import Path
+from datetime import datetime
 from typing import Optional, Dict
-from logging.handlers import RotatingFileHandler, TimedRotatingFileHandler
-
-from .config import Config, BASE_DIR
+from logging.handlers import RotatingFileHandler
 
 
-# Diretório de logs
-LOGS_DIR = BASE_DIR / "data" / "logs"
-LOGS_DIR.mkdir(parents=True, exist_ok=True)
+# Adiciona nível SUCCESS (entre INFO e WARNING)
+SUCCESS = 25
+logging.addLevelName(SUCCESS, 'SUCCESS')
+
+
+# Cores para console (ANSI)
+class Colors:
+    RESET = '\033[0m'
+    RED = '\033[91m'
+    GREEN = '\033[92m'
+    YELLOW = '\033[93m'
+    BLUE = '\033[94m'
+    MAGENTA = '\033[95m'
+    CYAN = '\033[96m'
+    WHITE = '\033[97m'
+    BRIGHT_GREEN = '\033[1;92m'
 
 
 class ColoredFormatter(logging.Formatter):
-    """Formatter com cores para console"""
+    """Formatter com cores para diferentes níveis de log"""
     
     COLORS = {
-        'DEBUG': '\033[36m',     # Cyan
-        'INFO': '\033[32m',      # Green
-        'WARNING': '\033[33m',   # Yellow
-        'ERROR': '\033[31m',     # Red
-        'CRITICAL': '\033[41m',  # Red background
+        logging.DEBUG: Colors.CYAN,
+        logging.INFO: Colors.GREEN,
+        SUCCESS: Colors.BRIGHT_GREEN,
+        logging.WARNING: Colors.YELLOW,
+        logging.ERROR: Colors.RED,
+        logging.CRITICAL: Colors.MAGENTA,
     }
-    RESET = '\033[0m'
     
-    def format(self, record):
-        color = self.COLORS.get(record.levelname, self.RESET)
-        record.levelname = f"{color}{record.levelname}{self.RESET}"
+    def format(self, record: logging.LogRecord) -> str:
+        color = self.COLORS.get(record.levelno, Colors.WHITE)
+        
+        # Adiciona emoji baseado no módulo
+        emoji = self._get_emoji(record.name)
+        
+        # Formata a mensagem
+        record.emoji = emoji
+        record.color = color
+        record.reset = Colors.RESET
+        
         return super().format(record)
+    
+    def _get_emoji(self, name: str) -> str:
+        """Retorna emoji baseado no nome do logger"""
+        emoji_map = {
+            'brain': '🧠',
+            'bot': '🤖',
+            'gold': '🥇',
+            'euro': '💶',
+            'gbp': '💷',
+            'telegram': '💬',
+            'mt5': '📊',
+            'risk': '⚠️',
+            'position': '📈',
+            'strategy': '🎯',
+            'advisor': '📝',
+            'ml': '🔮',
+            'orchestrator': '🎭',
+        }
+        
+        name_lower = name.lower()
+        for key, emoji in emoji_map.items():
+            if key in name_lower:
+                return emoji
+        return '📌'
 
 
-class BrainLogger:
+class VirtusLogger:
     """
-    Gerenciador de logging do sistema BRAIN
+    Logger personalizado para VIRTUS
     
-    Características:
-    - Logger separado por bot
-    - Rotação de arquivos
-    - Cores no console
-    - Níveis configuráveis
+    Suporta:
+    - Log em console colorido
+    - Log em arquivo com rotação
+    - Log separado por bot/módulo
     """
     
-    _instance: Optional["BrainLogger"] = None
     _loggers: Dict[str, logging.Logger] = {}
+    _initialized = False
+    _log_path: Optional[Path] = None
+    _log_level: int = logging.INFO
     
-    def __new__(cls):
-        if cls._instance is None:
-            cls._instance = super().__new__(cls)
-            cls._instance._initialized = False
-        return cls._instance
-    
-    def __init__(self):
-        if self._initialized:
-            return
-            
-        self._initialized = True
-        self._config = Config()
-        self._setup_root_logger()
-    
-    def _setup_root_logger(self):
-        """Configura o logger raiz"""
-        log_config = self._config.logging
-        
-        # Configurar logger raiz
-        root_logger = logging.getLogger("brain")
-        root_logger.setLevel(getattr(logging, log_config.level.upper()))
-        
-        # Handler de console com cores
-        console_handler = logging.StreamHandler(sys.stdout)
-        console_handler.setLevel(logging.DEBUG)
-        console_formatter = ColoredFormatter(
-            "%(asctime)s | %(levelname)-8s | %(name)s | %(message)s",
-            datefmt="%H:%M:%S"
-        )
-        console_handler.setFormatter(console_formatter)
-        root_logger.addHandler(console_handler)
-        
-        # Handler de arquivo principal
-        main_log_path = LOGS_DIR / "brain.log"
-        file_handler = TimedRotatingFileHandler(
-            main_log_path,
-            when="midnight",
-            interval=1,
-            backupCount=log_config.max_files,
-            encoding="utf-8"
-        )
-        file_handler.setLevel(logging.DEBUG)
-        file_formatter = logging.Formatter(log_config.format)
-        file_handler.setFormatter(file_formatter)
-        root_logger.addHandler(file_handler)
-        
-        self._loggers["brain"] = root_logger
-    
-    def get_logger(self, name: str) -> logging.Logger:
+    @classmethod
+    def setup(
+        cls,
+        log_path: Optional[str] = None,
+        level: str = "INFO",
+        max_size_mb: int = 10,
+        backup_count: int = 5
+    ) -> None:
         """
-        Retorna um logger para um módulo/bot específico
+        Configura o sistema de logging
         
         Args:
-            name: Nome do logger (ex: "gold", "euro", "brain.cache")
+            log_path: Caminho para salvar logs
+            level: Nível de log (DEBUG, INFO, WARNING, ERROR)
+            max_size_mb: Tamanho máximo do arquivo de log
+            backup_count: Número de backups a manter
+        """
+        cls._log_level = getattr(logging, level.upper(), logging.INFO)
+        
+        if log_path:
+            cls._log_path = Path(log_path)
+            cls._log_path.mkdir(parents=True, exist_ok=True)
+        
+        cls._max_size = max_size_mb * 1024 * 1024
+        cls._backup_count = backup_count
+        cls._initialized = True
+    
+    @classmethod
+    def get_logger(
+        cls,
+        name: str,
+        log_file: Optional[str] = None
+    ) -> logging.Logger:
+        """
+        Obtém um logger configurado
+        
+        Args:
+            name: Nome do logger (ex: "brain", "bot.gold")
+            log_file: Arquivo de log específico (opcional)
         
         Returns:
             Logger configurado
         """
-        if name in self._loggers:
-            return self._loggers[name]
+        if name in cls._loggers:
+            return cls._loggers[name]
         
-        log_config = self._config.logging
+        # Criar logger
+        logger = logging.getLogger(f"virtus.{name}")
+        logger.setLevel(cls._log_level)
+        logger.propagate = False
         
-        # Criar logger filho
-        logger = logging.getLogger(f"brain.{name}")
-        logger.setLevel(getattr(logging, log_config.level.upper()))
+        # Handler de console com UTF-8 para suportar emojis no Windows
+        import io
+        if sys.platform == 'win32':
+            # Força UTF-8 no stdout para Windows
+            sys.stdout.reconfigure(encoding='utf-8', errors='replace')
         
-        # Handler de arquivo específico para bots
-        if name in ["gold", "euro", "gbp"]:
-            bot_log_path = LOGS_DIR / f"{name}.log"
-            bot_handler = TimedRotatingFileHandler(
-                bot_log_path,
-                when="midnight",
-                interval=1,
-                backupCount=log_config.max_files,
-                encoding="utf-8"
+        console_handler = logging.StreamHandler(sys.stdout)
+        console_handler.setLevel(cls._log_level)
+        
+        # Formato colorido para console
+        console_format = "%(color)s%(emoji)s %(asctime)s [%(name)s] %(levelname)s: %(message)s%(reset)s"
+        console_formatter = ColoredFormatter(console_format, datefmt='%H:%M:%S')
+        console_handler.setFormatter(console_formatter)
+        logger.addHandler(console_handler)
+        
+        # Handler de arquivo (se configurado)
+        if cls._log_path:
+            if log_file:
+                file_path = cls._log_path / log_file
+            else:
+                file_path = cls._log_path / f"{name.replace('.', '_')}.log"
+            
+            file_path.parent.mkdir(parents=True, exist_ok=True)
+            
+            file_handler = RotatingFileHandler(
+                file_path,
+                maxBytes=cls._max_size if hasattr(cls, '_max_size') else 10*1024*1024,
+                backupCount=cls._backup_count if hasattr(cls, '_backup_count') else 5,
+                encoding='utf-8'
             )
-            bot_handler.setLevel(logging.DEBUG)
-            bot_formatter = logging.Formatter(log_config.format)
-            bot_handler.setFormatter(bot_formatter)
-            logger.addHandler(bot_handler)
+            file_handler.setLevel(cls._log_level)
+            
+            # Formato para arquivo (sem cores)
+            file_format = "%(asctime)s [%(name)s] %(levelname)s: %(message)s"
+            file_formatter = logging.Formatter(file_format, datefmt='%Y-%m-%d %H:%M:%S')
+            file_handler.setFormatter(file_formatter)
+            logger.addHandler(file_handler)
         
-        self._loggers[name] = logger
-        return logger
+        cls._loggers[name] = logger
+        return EnhancedLogger(logger)
+
+
+class EnhancedLogger:
+    """Logger wrapper com método success()"""
     
-    def set_level(self, level: str, logger_name: Optional[str] = None):
-        """Define o nível de logging"""
-        level_value = getattr(logging, level.upper())
-        
-        if logger_name:
-            if logger_name in self._loggers:
-                self._loggers[logger_name].setLevel(level_value)
-        else:
-            for logger in self._loggers.values():
-                logger.setLevel(level_value)
+    def __init__(self, logger: logging.Logger):
+        self._logger = logger
+    
+    def debug(self, msg: str, *args, **kwargs):
+        self._logger.debug(msg, *args, **kwargs)
+    
+    def info(self, msg: str, *args, **kwargs):
+        self._logger.info(msg, *args, **kwargs)
+    
+    def warning(self, msg: str, *args, **kwargs):
+        self._logger.warning(msg, *args, **kwargs)
+    
+    def error(self, msg: str, *args, **kwargs):
+        self._logger.error(msg, *args, **kwargs)
+    
+    def critical(self, msg: str, *args, **kwargs):
+        self._logger.critical(msg, *args, **kwargs)
+    
+    def exception(self, msg: str, *args, **kwargs):
+        self._logger.exception(msg, *args, **kwargs)
+    
+    def success(self, msg: str, *args, **kwargs):
+        """Log de sucesso (nível SUCCESS = 25)"""
+        self._logger.log(SUCCESS, msg, *args, **kwargs)
+    
+    def __getattr__(self, name):
+        """Delega atributos desconhecidos ao logger interno"""
+        return getattr(self._logger, name)
 
 
-# Instância global
-_logger_manager: Optional[BrainLogger] = None
-
-
-def setup_logger() -> BrainLogger:
-    """Inicializa o sistema de logging"""
-    global _logger_manager
-    if _logger_manager is None:
-        _logger_manager = BrainLogger()
-    return _logger_manager
-
-
-def get_logger(name: str = "brain") -> logging.Logger:
+def get_logger(name: str, log_file: Optional[str] = None) -> EnhancedLogger:
     """
-    Retorna um logger configurado
+    Função helper para obter logger
     
     Args:
         name: Nome do logger
-        
+        log_file: Arquivo de log específico
+    
     Returns:
         Logger configurado
-        
-    Exemplo:
-        logger = get_logger("gold")
-        logger.info("Bot Gold iniciado")
     """
-    global _logger_manager
-    if _logger_manager is None:
-        _logger_manager = BrainLogger()
-    return _logger_manager.get_logger(name)
+    return VirtusLogger.get_logger(name, log_file)
 
 
-# Aliases para conveniência
-def debug(msg: str, name: str = "brain"):
-    get_logger(name).debug(msg)
+def setup_logger(
+    log_path: Optional[str] = None,
+    level: str = "INFO",
+    max_size_mb: int = 10,
+    backup_count: int = 5
+) -> None:
+    """
+    Configura o sistema de logging
+    
+    Args:
+        log_path: Caminho para salvar logs
+        level: Nível de log
+        max_size_mb: Tamanho máximo do arquivo
+        backup_count: Número de backups
+    """
+    VirtusLogger.setup(log_path, level, max_size_mb, backup_count)
 
-def info(msg: str, name: str = "brain"):
-    get_logger(name).info(msg)
 
-def warning(msg: str, name: str = "brain"):
-    get_logger(name).warning(msg)
-
-def error(msg: str, name: str = "brain"):
-    get_logger(name).error(msg)
-
-def critical(msg: str, name: str = "brain"):
-    get_logger(name).critical(msg)
+# Logger padrão do sistema
+def get_system_logger() -> logging.Logger:
+    """Retorna logger do sistema principal"""
+    return get_logger("system")

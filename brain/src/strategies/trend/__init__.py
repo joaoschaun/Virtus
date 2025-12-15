@@ -1,5 +1,25 @@
-# Trend Strategies
-from .trend_strategy import TrendFollowingStrategy
-from .breakout_strategy import BreakoutStrategy
+"""VIRTUS Trend Strategy Module
+=============================
 
-__all__ = ['TrendFollowingStrategy', 'BreakoutStrategy']
+Estratégia de trend following com 7 setups SMC/MTF.
+"""
+
+# Legacy
+try:
+    from .trend_following import TrendFollowingStrategy
+    from .breakout import BreakoutStrategy
+except ImportError:
+    pass
+
+# New advanced strategy
+from .trend_strategy import (
+    TrendStrategy,
+    TrendSetup,
+    TrendConfig,
+)
+
+__all__ = [
+    'TrendStrategy',
+    'TrendSetup',
+    'TrendConfig',
+]

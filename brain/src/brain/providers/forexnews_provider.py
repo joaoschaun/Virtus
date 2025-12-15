@@ -1,167 +1,392 @@
 """
-BRAIN - ForexNews Provider
-Provider de notícias forex
+VIRTUS Brain - ForexNews Provider
+==================================
+
+Provider para API ForexNews - principal fonte de notícias e sentimento.
+
+API Docs: https://forexnewsapi.com/
+Features:
+- Notícias de forex em tempo real
+- Análise de sentimento
+- Filtro por moedas
+- Alto volume de requisições (1000/dia)
 """
 
-import os
-from datetime import datetime
-from typing import Any, Dict, List, Optional
+import asyncio
+from datetime import datetime, timedelta
+from typing import List, Dict, Any, Optional
 
-from .base_provider import BaseProvider
-from ...core.types import NewsItem, NewsImpact
+from .base_provider import NewsProvider, SentimentProvider
 from ...core.logger import get_logger
-from ...core.exceptions import ProviderError
+from ...core.types import NewsItem, MarketSentiment, SentimentLevel, NewsImpact
+from ..cache import cached, CacheManager
+from ..budget import BudgetManager
 
-logger = get_logger("brain.provider.forexnews")
+logger = get_logger("forexnews")
 
 
-class ForexNewsProvider(BaseProvider):
+class ForexNewsProvider(NewsProvider, SentimentProvider):
     """
-    Provider de notícias do ForexNews API
+    Provider para ForexNews API.
     
-    https://forexnewsapi.com/
+    Principal fonte para:
+    - Notícias de forex
+    - Sentimento de mercado
+    - Headlines para briefings
     """
     
-    def __init__(self, config: Dict[str, Any]):
-        super().__init__(config)
-        
-        # API key do ambiente se não configurada
-        self._api_key = self._api_key or os.getenv("FOREXNEWS_API_KEY")
-        self._base_url = config.get("base_url", "https://forexnewsapi.com/api/v1")
+    PROVIDER_NAME = "forexnews"
+    BASE_URL = "https://forexnewsapi.com/api/v1"
     
-    def _get_default_headers(self) -> Dict[str, str]:
-        """Headers para ForexNews API"""
+    # Mapeamento de símbolos para formato ForexNewsAPI (EUR-USD format)
+    SYMBOL_TO_PAIR = {
+        'XAUUSD': 'XAU-USD',
+        'EURUSD': 'EUR-USD',
+        'GBPUSD': 'GBP-USD',
+        'USDJPY': 'USD-JPY',
+        'USDCHF': 'USD-CHF',
+        'AUDUSD': 'AUD-USD',
+        'USDCAD': 'USD-CAD',
+        'NZDUSD': 'NZD-USD',
+        'EURGBP': 'EUR-GBP',
+        'EURJPY': 'EUR-JPY',
+        'GBPJPY': 'GBP-JPY',
+        'XAGUSD': 'XAG-USD',  # Silver
+    }
+    
+    # Mapeamento de sentimento
+    SENTIMENT_MAP = {
+        'very_positive': SentimentLevel.VERY_BULLISH,
+        'positive': SentimentLevel.BULLISH,
+        'neutral': SentimentLevel.NEUTRAL,
+        'negative': SentimentLevel.BEARISH,
+        'very_negative': SentimentLevel.VERY_BEARISH,
+    }
+    
+    def __init__(
+        self,
+        api_key: str,
+        cache_manager: Optional[CacheManager] = None,
+        budget_manager: Optional[BudgetManager] = None
+    ):
+        super().__init__(
+            api_key=api_key,
+            cache_manager=cache_manager,
+            budget_manager=budget_manager
+        )
+    
+    def _get_headers(self) -> Dict[str, str]:
+        """Headers com autenticação"""
         return {
-            "Accept": "application/json",
-            "apikey": self._api_key or ""
+            'Authorization': f'Bearer {self.api_key}'
         }
+    
+    def _symbol_to_pair(self, symbol: str) -> str:
+        """Converte símbolo em formato ForexNewsAPI (EUR-USD)"""
+        return self.SYMBOL_TO_PAIR.get(symbol, symbol)
+    
+    # ========================================================================
+    # MÉTODOS PÚBLICOS
+    # ========================================================================
+    
+    async def health_check(self) -> bool:
+        """Verifica se a API está disponível"""
+        try:
+            params = {
+                'token': self.api_key,
+                'currencypair': 'EUR-USD',
+                'items': 1
+            }
+            await self.get('', params=params)  # Endpoint raiz com params
+            return True
+        except Exception as e:
+            logger.error(f"ForexNews health check falhou: {e}")
+            return False
+    
+    async def get_supported_symbols(self) -> List[str]:
+        """Retorna símbolos suportados"""
+        return list(self.SYMBOL_TO_CURRENCIES.keys())
     
     async def get_news(
         self,
-        symbol: Optional[str] = None,
-        limit: int = 20
+        symbols: Optional[List[str]] = None,
+        limit: int = 10,
+        hours_back: int = 24
     ) -> List[NewsItem]:
         """
-        Busca notícias
+        Busca notícias para símbolos.
         
         Args:
-            symbol: Símbolo (XAUUSD, EURUSD, etc.) ou None para todas
+            symbols: Lista de símbolos (ex: ['XAUUSD', 'EURUSD'])
             limit: Número máximo de notícias
+            hours_back: Horas no passado para buscar
             
         Returns:
             Lista de NewsItem
         """
-        if not self._api_key:
-            logger.warning("ForexNews API key não configurada")
-            return []
+        all_news = []
         
-        try:
+        # Se nenhum símbolo especificado, busca para todos os pares configurados
+        if not symbols:
+            symbols = list(self.SYMBOL_TO_PAIR.keys())[:3]  # Top 3 por padrão
+        
+        # Busca notícias para cada símbolo (API aceita um par por vez)
+        for symbol in symbols:
+            currency_pair = self._symbol_to_pair(symbol)
+            
             params = {
-                "items": min(limit, 50),
-                "page": 1
+                'token': self.api_key,
+                'currencypair': currency_pair,
+                'items': min(limit, 50),  # API max é 50
             }
             
-            # Mapear símbolo para currencies
-            if symbol:
-                currencies = self._symbol_to_currencies(symbol)
-                if currencies:
-                    params["currencypair"] = currencies
-            
-            response = await self._request("GET", "/news", params=params)
-            
-            news_list = []
-            for item in response.get("data", []):
-                news = self._parse_news_item(item)
-                if news:
-                    news_list.append(news)
-            
-            logger.debug(f"ForexNews: {len(news_list)} notícias obtidas")
-            return news_list
-            
-        except ProviderError:
-            raise
-        except Exception as e:
-            logger.error(f"Erro ao buscar ForexNews: {e}")
-            return []
+            try:
+                response = await self.get('', params=params)  # Endpoint raiz com params
+                
+                for item in response.get('data', []):
+                    news = self._parse_news_item(item, [symbol])
+                    if news:
+                        all_news.append(news)
+                        
+            except Exception as e:
+                logger.warning(f"Erro ao buscar notícias para {symbol}: {e}")
+                continue
+        
+        # Remove duplicatas por URL e ordena por data
+        seen_urls = set()
+        unique_news = []
+        for news in all_news:
+            if news.url not in seen_urls:
+                seen_urls.add(news.url)
+                unique_news.append(news)
+        
+        unique_news.sort(key=lambda x: x.timestamp, reverse=True)
+        
+        logger.debug(f"ForexNews: {len(unique_news)} notícias encontradas")
+        return unique_news[:limit]
     
-    def _symbol_to_currencies(self, symbol: str) -> Optional[str]:
-        """Converte símbolo para formato da API"""
-        symbol_map = {
-            "XAUUSD": "XAU,USD",
-            "EURUSD": "EUR,USD",
-            "GBPUSD": "GBP,USD",
-            "USDJPY": "USD,JPY",
-            "USDCHF": "USD,CHF",
-            "AUDUSD": "AUD,USD",
-            "NZDUSD": "NZD,USD",
-            "USDCAD": "USD,CAD"
-        }
-        return symbol_map.get(symbol.upper())
-    
-    def _parse_news_item(self, data: Dict[str, Any]) -> Optional[NewsItem]:
-        """Converte resposta da API em NewsItem"""
+    async def get_sentiment(
+        self,
+        symbol: str
+    ) -> Optional[MarketSentiment]:
+        """
+        Calcula sentimento agregado para um símbolo.
+        
+        Args:
+            symbol: Símbolo (ex: 'XAUUSD')
+            
+        Returns:
+            MarketSentiment com scores agregados
+        """
         try:
-            # Parse da data
-            published_str = data.get("date", "")
-            published_at = datetime.now()
-            if published_str:
-                try:
-                    published_at = datetime.fromisoformat(
-                        published_str.replace("Z", "+00:00")
-                    )
-                except:
-                    pass
+            # Busca notícias recentes
+            news = await self.get_news(symbols=[symbol], limit=20, hours_back=24)
             
-            # Determinar impacto
-            importance = data.get("importance", "low")
-            impact_map = {
-                "high": NewsImpact.HIGH,
-                "medium": NewsImpact.MEDIUM,
-                "low": NewsImpact.LOW
-            }
-            impact = impact_map.get(importance.lower(), NewsImpact.LOW)
+            if not news:
+                return MarketSentiment(
+                    symbol=symbol,
+                    timestamp=datetime.now(),
+                    news_sentiment=0.0,
+                    overall_sentiment=0.0,
+                    sentiment_level=SentimentLevel.NEUTRAL,
+                    explanation_pt="Sem notícias recentes para análise"
+                )
             
-            # Extrair símbolos
-            currencies = data.get("currencies", [])
-            symbols = self._currencies_to_symbols(currencies)
+            # Agrega sentimentos
+            total_score = sum(n.sentiment_score for n in news)
+            avg_score = total_score / len(news)
             
-            return NewsItem(
-                id=str(data.get("news_id", "")),
-                title=data.get("title", ""),
-                summary=data.get("text", "")[:500],  # Limitar tamanho
-                source=data.get("source_name", "ForexNews"),
-                url=data.get("news_url", ""),
-                published_at=published_at,
-                symbols=symbols,
-                impact=impact,
-                sentiment=0.0  # Será calculado pelo SentimentAnalyzer
+            # Determina nível
+            if avg_score >= 0.6:
+                level = SentimentLevel.VERY_BULLISH
+            elif avg_score >= 0.2:
+                level = SentimentLevel.BULLISH
+            elif avg_score >= -0.2:
+                level = SentimentLevel.NEUTRAL
+            elif avg_score >= -0.6:
+                level = SentimentLevel.BEARISH
+            else:
+                level = SentimentLevel.VERY_BEARISH
+            
+            # Monta explicação
+            explanation_pt = self._generate_sentiment_explanation(
+                symbol, avg_score, len(news), level
             )
+            
+            return MarketSentiment(
+                symbol=symbol,
+                timestamp=datetime.now(),
+                news_sentiment=avg_score,
+                overall_sentiment=avg_score,
+                sentiment_level=level,
+                news_count=len(news),
+                sources=['ForexNews'],
+                explanation_pt=explanation_pt
+            )
+            
         except Exception as e:
-            logger.error(f"Erro ao parsear notícia: {e}")
+            logger.error(f"Erro ao calcular sentimento ForexNews: {e}")
             return None
     
-    def _currencies_to_symbols(self, currencies: List[str]) -> List[str]:
-        """Converte lista de moedas em símbolos"""
-        symbols = []
+    async def get_top_headlines(
+        self,
+        limit: int = 5
+    ) -> List[NewsItem]:
+        """
+        Busca principais headlines do dia.
         
-        currency_set = set(c.upper() for c in currencies)
+        Args:
+            limit: Número de headlines
+            
+        Returns:
+            Lista de headlines principais
+        """
+        # Busca notícias dos principais pares
+        headlines = []
+        main_pairs = ['EUR-USD', 'GBP-USD', 'XAU-USD']
         
-        if "XAU" in currency_set or "GOLD" in currency_set:
-            symbols.append("XAUUSD")
-        if "EUR" in currency_set and "USD" in currency_set:
-            symbols.append("EURUSD")
-        if "GBP" in currency_set and "USD" in currency_set:
-            symbols.append("GBPUSD")
+        for pair in main_pairs:
+            params = {
+                'token': self.api_key,
+                'currencypair': pair,
+                'items': limit
+            }
+            
+            try:
+                response = await self.get('', params=params)
+                
+                for item in response.get('data', []):
+                    news = self._parse_news_item(item, [])
+                    if news:
+                        headlines.append(news)
+            except Exception as e:
+                logger.warning(f"Erro ao buscar headlines para {pair}: {e}")
+                continue
         
-        return symbols
+        # Remove duplicatas e ordena por data
+        seen_urls = set()
+        unique_headlines = []
+        for news in headlines:
+            if news.url not in seen_urls:
+                seen_urls.add(news.url)
+                unique_headlines.append(news)
+        
+        unique_headlines.sort(key=lambda x: x.timestamp, reverse=True)
+        return unique_headlines[:limit]
     
-    async def health_check(self) -> bool:
-        """Verifica saúde do provider"""
-        if not self._api_key:
-            return False
-        
+    # ========================================================================
+    # MÉTODOS PRIVADOS
+    # ========================================================================
+    
+    def _parse_news_item(
+        self,
+        data: Dict[str, Any],
+        symbols: List[str]
+    ) -> Optional[NewsItem]:
+        """Converte resposta da API em NewsItem"""
         try:
-            await self._request("GET", "/news", params={"items": 1})
-            return True
-        except:
-            return False
+            # Parse timestamp - formato: "Sun, 14 Dec 2025 00:52:46 -0500"
+            date_str = data.get('date', '')
+            if date_str:
+                try:
+                    from email.utils import parsedate_to_datetime
+                    timestamp = parsedate_to_datetime(date_str)
+                except:
+                    timestamp = datetime.now()
+            else:
+                timestamp = datetime.now()
+            
+            # Extrai sentimento - ForexNewsAPI retorna "Positive", "Negative", "Neutral"
+            sentiment_str = data.get('sentiment', 'Neutral').lower()
+            
+            # Mapeia para score numérico
+            sentiment_scores = {
+                'positive': 0.5,
+                'negative': -0.5,
+                'neutral': 0.0,
+            }
+            sentiment_score = sentiment_scores.get(sentiment_str, 0.0)
+            
+            # Mapeia para SentimentLevel
+            sentiment_levels = {
+                'positive': SentimentLevel.BULLISH,
+                'negative': SentimentLevel.BEARISH,
+                'neutral': SentimentLevel.NEUTRAL,
+            }
+            sentiment_label = sentiment_levels.get(sentiment_str, SentimentLevel.NEUTRAL)
+            
+            # Determina impacto
+            impact = self._determine_impact(data)
+            
+            # Extrai símbolos da notícia (currency field: ["EUR-USD"])
+            news_currencies = data.get('currency', [])
+            if news_currencies and not symbols:
+                # Converte EUR-USD para EURUSD
+                symbols = [c.replace('-', '') for c in news_currencies]
+            
+            return NewsItem(
+                title=data.get('title', ''),
+                summary=data.get('text', '')[:500],
+                source=data.get('source_name', 'ForexNews'),
+                timestamp=timestamp,
+                url=data.get('news_url'),
+                sentiment_score=sentiment_score,
+                sentiment_label=sentiment_label,
+                impact=impact,
+                symbols=symbols
+            )
+            
+        except Exception as e:
+            logger.warning(f"Erro ao parsear notícia: {e}")
+            return None
+    
+    def _determine_impact(self, data: Dict[str, Any]) -> NewsImpact:
+        """Determina impacto da notícia"""
+        # Analisa keywords para determinar impacto
+        title = data.get('title', '').lower()
+        text = data.get('text', '').lower()
+        content = title + ' ' + text
+        
+        high_impact_keywords = [
+            'fed', 'fomc', 'interest rate', 'inflation', 'gdp',
+            'payroll', 'unemployment', 'central bank', 'ecb',
+            'boe', 'breaking', 'urgent', 'crisis'
+        ]
+        
+        medium_impact_keywords = [
+            'retail sales', 'manufacturing', 'pmi', 'consumer',
+            'trade balance', 'housing', 'earnings'
+        ]
+        
+        for keyword in high_impact_keywords:
+            if keyword in content:
+                return NewsImpact.HIGH
+        
+        for keyword in medium_impact_keywords:
+            if keyword in content:
+                return NewsImpact.MEDIUM
+        
+        return NewsImpact.LOW
+    
+    def _generate_sentiment_explanation(
+        self,
+        symbol: str,
+        score: float,
+        news_count: int,
+        level: SentimentLevel
+    ) -> str:
+        """Gera explicação em português do sentimento"""
+        
+        level_text = {
+            SentimentLevel.VERY_BULLISH: "muito positivo (altista forte)",
+            SentimentLevel.BULLISH: "positivo (altista)",
+            SentimentLevel.NEUTRAL: "neutro",
+            SentimentLevel.BEARISH: "negativo (baixista)",
+            SentimentLevel.VERY_BEARISH: "muito negativo (baixista forte)"
+        }
+        
+        return (
+            f"Análise de {news_count} notícias recentes sobre {symbol}. "
+            f"Sentimento geral: {level_text.get(level, 'neutro')} "
+            f"(score: {score:.2f})"
+        )

@@ -1,14 +1,35 @@
-# Brain Providers Module
-from .base_provider import BaseProvider
+"""
+VIRTUS Brain - Providers Module
+================================
+
+Providers para APIs externas de dados.
+"""
+
+from .base_provider import (
+    BaseProvider,
+    NewsProvider,
+    SentimentProvider,
+    CalendarProvider,
+    MarketDataProvider
+)
 from .forexnews_provider import ForexNewsProvider
 from .finnhub_provider import FinnhubProvider
-from .cot_provider import COTProvider
-from .calendar_provider import CalendarProvider
+from .twelvedata_provider import TwelveDataProvider
+from .fmp_provider import FMPProvider
+from .cftc_provider import CFTCProvider
 
 __all__ = [
+    # Base
     'BaseProvider',
-    'ForexNewsProvider', 
+    'NewsProvider',
+    'SentimentProvider',
+    'CalendarProvider',
+    'MarketDataProvider',
+    
+    # Providers
+    'ForexNewsProvider',
     'FinnhubProvider',
-    'COTProvider',
-    'CalendarProvider'
+    'TwelveDataProvider',
+    'FMPProvider',
+    'CFTCProvider',
 ]

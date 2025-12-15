@@ -1,0 +1,156 @@
+{
+  "total_candles": 1314492,
+  "collected_at": "2025-12-14T18:07:01.725419",
+  "symbols": [
+    "XAUUSD",
+    "EURUSD",
+    "GBPUSD"
+  ],
+  "timeframes": [
+    "M1",
+    "M5",
+    "M15",
+    "M30",
+    "H1",
+    "H4",
+    "D1"
+  ],
+  "details": [
+    {
+      "symbol": "XAUUSD",
+      "timeframe": "M1",
+      "candles": 99908,
+      "start": "2025-09-03 07:38:00",
+      "end": "2025-12-15 02:02:00",
+      "file": "C:\\Users\\Administrator\\Desktop\\Virtus\\brain\\data\\historical\\XAUUSD\\M1\\raw_data.csv"
+    },
+    {
+      "symbol": "XAUUSD",
+      "timeframe": "M5",
+      "candles": 99976,
+      "start": "2024-07-18 01:45:00",
+      "end": "2025-12-15 02:00:00",
+      "file": "C:\\Users\\Administrator\\Desktop\\Virtus\\brain\\data\\historical\\XAUUSD\\M5\\raw_data.csv"
+    },
+    {
+      "symbol": "XAUUSD",
+      "timeframe": "M15",
+      "candles": 99992,
+      "start": "2021-09-23 02:15:00",
+      "end": "2025-12-15 02:00:00",
+      "file": "C:\\Users\\Administrator\\Desktop\\Virtus\\brain\\data\\historical\\XAUUSD\\M15\\raw_data.csv"
+    },
+    {
+      "symbol": "XAUUSD",
+      "timeframe": "M30",
+      "candles": 80000,
+      "start": "2019-03-12 02:30:00",
+      "end": "2025-12-15 02:00:00",
+      "file": "C:\\Users\\Administrator\\Desktop\\Virtus\\brain\\data\\historical\\XAUUSD\\M30\\raw_data.csv"
+    },
+    {
+      "symbol": "XAUUSD",
+      "timeframe": "H1",
+      "candles": 50000,
+      "start": "2017-06-28 03:00:00",
+      "end": "2025-12-15 02:00:00",
+      "file": "C:\\Users\\Administrator\\Desktop\\Virtus\\brain\\data\\historical\\XAUUSD\\H1\\raw_data.csv"
+    },
+    {
+      "symbol": "XAUUSD",
+      "timeframe": "H4",
+      "candles": 19860,
+      "start": "1998-04-22 00:00:00",
+      "end": "2025-12-15 00:00:00",
+      "file": "C:\\Users\\Administrator\\Desktop\\Virtus\\brain\\data\\historical\\XAUUSD\\H4\\raw_data.csv"
+    },
+    {
+      "symbol": "XAUUSD",
+      "timeframe": "D1",
+      "candles": 5000,
+      "start": "2006-10-11 00:00:00",
+      "end": "2025-12-15 00:00:00",
+      "file": "C:\\Users\\Administrator\\Desktop\\Virtus\\brain\\data\\historical\\XAUUSD\\D1\\raw_data.csv"
+    },
+    {
+      "symbol": "EURUSD",
+      "timeframe": "M1",
+      "candles": 99909,
+      "start": "2025-09-08 13:33:00",
+      "end": "2025-12-15 02:03:00",
+      "file": "C:\\Users\\Administrator\\Desktop\\Virtus\\brain\\data\\historical\\EURUSD\\M1\\raw_data.csv"
+    },
+    {
+      "symbol": "EURUSD",
+      "timeframe": "M5",
+      "candles": 99976,
+      "start": "2024-08-12 10:50:00",
+      "end": "2025-12-15 02:00:00",
+      "file": "C:\\Users\\Administrator\\Desktop\\Virtus\\brain\\data\\historical\\EURUSD\\M5\\raw_data.csv"
+    },
+    {
+      "symbol": "EURUSD",
+      "timeframe": "M15",
+      "candles": 99992,
+      "start": "2021-12-08 16:30:00",
+      "end": "2025-12-15 02:00:00",
+      "file": "C:\\Users\\Administrator\\Desktop\\Virtus\\brain\\data\\historical\\EURUSD\\M15\\raw_data.csv"
+    },
+    {
+      "symbol": "EURUSD",
+      "timeframe": "M30",
+      "candles": 80000,
+      "start": "2019-07-11 14:00:00",
+      "end": "2025-12-15 02:00:00",
+      "file": "C:\\Users\\Administrator\\Desktop\\Virtus\\brain\\data\\historical\\EURUSD\\M30\\raw_data.csv"
+    },
+    {
+      "symbol": "EURUSD",
+      "timeframe": "H1",
+      "candles": 50000,
+      "start": "2017-11-29 21:00:00",
+      "end": "2025-12-15 02:00:00",
+      "file": "C:\\Users\\Administrator\\Desktop\\Virtus\\brain\\data\\historical\\EURUSD\\H1\\raw_data.csv"
+    },
+    {
+      "symbol": "GBPUSD",
+      "timeframe": "M1",
+      "candles": 99911,
+      "start": "2025-09-08 13:32:00",
+      "end": "2025-12-15 02:05:00",
+      "file": "C:\\Users\\Administrator\\Desktop\\Virtus\\brain\\data\\historical\\GBPUSD\\M1\\raw_data.csv"
+    },
+    {
+      "symbol": "GBPUSD",
+      "timeframe": "M5",
+      "candles": 99976,
+      "start": "2024-08-12 10:45:00",
+      "end": "2025-12-15 02:05:00",
+      "file": "C:\\Users\\Administrator\\Desktop\\Virtus\\brain\\data\\historical\\GBPUSD\\M5\\raw_data.csv"
+    },
+    {
+      "symbol": "GBPUSD",
+      "timeframe": "M15",
+      "candles": 99992,
+      "start": "2021-12-08 15:30:00",
+      "end": "2025-12-15 02:00:00",
+      "file": "C:\\Users\\Administrator\\Desktop\\Virtus\\brain\\data\\historical\\GBPUSD\\M15\\raw_data.csv"
+    },
+    {
+      "symbol": "GBPUSD",
+      "timeframe": "M30",
+      "candles": 80000,
+      "start": "2019-07-11 13:30:00",
+      "end": "2025-12-15 02:00:00",
+      "file": "C:\\Users\\Administrator\\Desktop\\Virtus\\brain\\data\\historical\\GBPUSD\\M30\\raw_data.csv"
+    },
+    {
+      "symbol": "GBPUSD",
+      "timeframe": "H1",
+      "candles": 50000,
+      "start": "2017-11-29 01:00:00",
+      "end": "2025-12-15 02:00:00",
+      "file": "C:\\Users\\Administrator\\Desktop\\Virtus\\brain\\data\\historical\\GBPUSD\\H1\\raw_data.csv"
+    }
+  ]
+}

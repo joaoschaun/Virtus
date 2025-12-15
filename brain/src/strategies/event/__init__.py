@@ -1,4 +1,18 @@
-# Event Strategies
-from .event_strategy import EventStrategy
+"""VIRTUS Event Strategy Module
+=============================
 
-__all__ = ['EventStrategy']
+Estratégia de event trading com 5 setups.
+"""
+
+# New advanced strategy
+from .event_strategy import (
+    EventStrategy,
+    EventSetup,
+    EventConfig,
+)
+
+__all__ = [
+    'EventStrategy',
+    'EventSetup',
+    'EventConfig',
+]

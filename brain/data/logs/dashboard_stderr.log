@@ -1,0 +1,229 @@
+2025-12-13 06:09:57,148 - INFO - ============================================================
+2025-12-13 06:09:57,149 - INFO - VIRTUS Dashboard Service Iniciando
+2025-12-13 06:09:57,150 - INFO - Backend: C:\Users\Administrator\Desktop\Virtus\brain\dashboard\backend
+2025-12-13 06:09:57,150 - INFO - Porta: 8000
+2025-12-13 06:09:57,150 - INFO - ============================================================
+2025-12-13 06:09:57,153 - INFO - Iniciando servidor: C:\Users\Administrator\AppData\Local\Programs\Python\Python311\python.exe -m uvicorn main:app --host 0.0.0.0 --port 8000 --workers 2 --log-level info
+--- Logging error ---
+Traceback (most recent call last):
+  File "C:\Users\Administrator\AppData\Local\Programs\Python\Python311\Lib\logging\__init__.py", line 1113, in emit
+    stream.write(msg + self.terminator)
+  File "C:\Users\Administrator\AppData\Local\Programs\Python\Python311\Lib\encodings\cp1252.py", line 19, in encode
+    return codecs.charmap_encode(input,self.errors,encoding_table)[0]
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+UnicodeEncodeError: 'charmap' codec can't encode character '\u2713' in position 33: character maps to <undefined>
+Call stack:
+  File "C:\Users\Administrator\Desktop\Virtus\brain\dashboard\backend\windows_service.py", line 251, in <module>
+    main()
+  File "C:\Users\Administrator\Desktop\Virtus\brain\dashboard\backend\windows_service.py", line 247, in main
+    service.run()
+  File "C:\Users\Administrator\Desktop\Virtus\brain\dashboard\backend\windows_service.py", line 207, in run
+    if not self.start_server():
+  File "C:\Users\Administrator\Desktop\Virtus\brain\dashboard\backend\windows_service.py", line 127, in start_server
+    logger.info(f"\u2713 Servidor iniciado com sucesso na porta {self.port}")
+Message: '\u2713 Servidor iniciado com sucesso na porta 8000'
+Arguments: ()
+2025-12-13 06:10:00,172 - INFO - \u2713 Servidor iniciado com sucesso na porta 8000
+2025-12-13 06:57:42,359 - INFO - Interrupção recebida. Parando serviço...
+2025-12-13 06:57:42,371 - INFO - Servidor parado
+2025-12-13 06:57:42,371 - INFO - VIRTUS Dashboard Service Encerrado
+2025-12-13 06:58:30,825 - INFO - ============================================================
+2025-12-13 06:58:30,826 - INFO - VIRTUS Dashboard Service Iniciando
+2025-12-13 06:58:30,826 - INFO - Backend: C:\Users\Administrator\Desktop\Virtus\brain\dashboard\backend
+2025-12-13 06:58:30,826 - INFO - Porta: 8000
+2025-12-13 06:58:30,827 - INFO - ============================================================
+2025-12-13 06:58:30,829 - INFO - Iniciando servidor: C:\Users\Administrator\AppData\Local\Programs\Python\Python311\python.exe -m uvicorn main:app --host 0.0.0.0 --port 8000 --workers 2 --log-level info
+--- Logging error ---
+Traceback (most recent call last):
+  File "C:\Users\Administrator\AppData\Local\Programs\Python\Python311\Lib\logging\__init__.py", line 1113, in emit
+    stream.write(msg + self.terminator)
+  File "C:\Users\Administrator\AppData\Local\Programs\Python\Python311\Lib\encodings\cp1252.py", line 19, in encode
+    return codecs.charmap_encode(input,self.errors,encoding_table)[0]
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+UnicodeEncodeError: 'charmap' codec can't encode character '\u2713' in position 33: character maps to <undefined>
+Call stack:
+  File "C:\Users\Administrator\Desktop\Virtus\brain\dashboard\backend\windows_service.py", line 251, in <module>
+    main()
+  File "C:\Users\Administrator\Desktop\Virtus\brain\dashboard\backend\windows_service.py", line 247, in main
+    service.run()
+  File "C:\Users\Administrator\Desktop\Virtus\brain\dashboard\backend\windows_service.py", line 207, in run
+    if not self.start_server():
+  File "C:\Users\Administrator\Desktop\Virtus\brain\dashboard\backend\windows_service.py", line 127, in start_server
+    logger.info(f"\u2713 Servidor iniciado com sucesso na porta {self.port}")
+Message: '\u2713 Servidor iniciado com sucesso na porta 8000'
+Arguments: ()
+2025-12-13 06:58:33,840 - INFO - \u2713 Servidor iniciado com sucesso na porta 8000
+2025-12-13 07:04:58,473 - INFO - Interrupção recebida. Parando serviço...
+2025-12-13 07:04:58,485 - INFO - Servidor parado
+2025-12-13 07:04:58,485 - INFO - VIRTUS Dashboard Service Encerrado
+2025-12-13 07:04:59,497 - INFO - ============================================================
+2025-12-13 07:04:59,498 - INFO - VIRTUS Dashboard Service Iniciando
+2025-12-13 07:04:59,498 - INFO - Backend: C:\Users\Administrator\Desktop\Virtus\brain\dashboard\backend
+2025-12-13 07:04:59,498 - INFO - Porta: 8000
+2025-12-13 07:04:59,498 - INFO - ============================================================
+2025-12-13 07:04:59,500 - INFO - Iniciando servidor: C:\Users\Administrator\AppData\Local\Programs\Python\Python311\python.exe -m uvicorn main:app --host 0.0.0.0 --port 8000 --workers 2 --log-level info
+--- Logging error ---
+Traceback (most recent call last):
+  File "C:\Users\Administrator\AppData\Local\Programs\Python\Python311\Lib\logging\__init__.py", line 1113, in emit
+    stream.write(msg + self.terminator)
+  File "C:\Users\Administrator\AppData\Local\Programs\Python\Python311\Lib\encodings\cp1252.py", line 19, in encode
+    return codecs.charmap_encode(input,self.errors,encoding_table)[0]
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+UnicodeEncodeError: 'charmap' codec can't encode character '\u2713' in position 33: character maps to <undefined>
+Call stack:
+  File "C:\Users\Administrator\Desktop\Virtus\brain\dashboard\backend\windows_service.py", line 251, in <module>
+    main()
+  File "C:\Users\Administrator\Desktop\Virtus\brain\dashboard\backend\windows_service.py", line 247, in main
+    service.run()
+  File "C:\Users\Administrator\Desktop\Virtus\brain\dashboard\backend\windows_service.py", line 207, in run
+    if not self.start_server():
+  File "C:\Users\Administrator\Desktop\Virtus\brain\dashboard\backend\windows_service.py", line 127, in start_server
+    logger.info(f"\u2713 Servidor iniciado com sucesso na porta {self.port}")
+Message: '\u2713 Servidor iniciado com sucesso na porta 8000'
+Arguments: ()
+2025-12-13 07:05:02,516 - INFO - \u2713 Servidor iniciado com sucesso na porta 8000
+2025-12-13 07:09:21,671 - INFO - Interrupção recebida. Parando serviço...
+2025-12-13 07:09:21,679 - INFO - Servidor parado
+2025-12-13 07:09:21,680 - INFO - VIRTUS Dashboard Service Encerrado
+2025-12-13 07:09:22,369 - INFO - ============================================================
+2025-12-13 07:09:22,370 - INFO - VIRTUS Dashboard Service Iniciando
+2025-12-13 07:09:22,370 - INFO - Backend: C:\Users\Administrator\Desktop\Virtus\brain\dashboard\backend
+2025-12-13 07:09:22,370 - INFO - Porta: 8000
+2025-12-13 07:09:22,370 - INFO - ============================================================
+2025-12-13 07:09:22,372 - INFO - Iniciando servidor: C:\Users\Administrator\AppData\Local\Programs\Python\Python311\python.exe -m uvicorn main:app --host 0.0.0.0 --port 8000 --workers 2 --log-level info
+--- Logging error ---
+Traceback (most recent call last):
+  File "C:\Users\Administrator\AppData\Local\Programs\Python\Python311\Lib\logging\__init__.py", line 1113, in emit
+    stream.write(msg + self.terminator)
+  File "C:\Users\Administrator\AppData\Local\Programs\Python\Python311\Lib\encodings\cp1252.py", line 19, in encode
+    return codecs.charmap_encode(input,self.errors,encoding_table)[0]
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+UnicodeEncodeError: 'charmap' codec can't encode character '\u2713' in position 33: character maps to <undefined>
+Call stack:
+  File "C:\Users\Administrator\Desktop\Virtus\brain\dashboard\backend\windows_service.py", line 251, in <module>
+    main()
+  File "C:\Users\Administrator\Desktop\Virtus\brain\dashboard\backend\windows_service.py", line 247, in main
+    service.run()
+  File "C:\Users\Administrator\Desktop\Virtus\brain\dashboard\backend\windows_service.py", line 207, in run
+    if not self.start_server():
+  File "C:\Users\Administrator\Desktop\Virtus\brain\dashboard\backend\windows_service.py", line 127, in start_server
+    logger.info(f"\u2713 Servidor iniciado com sucesso na porta {self.port}")
+Message: '\u2713 Servidor iniciado com sucesso na porta 8000'
+Arguments: ()
+2025-12-13 07:09:25,388 - INFO - \u2713 Servidor iniciado com sucesso na porta 8000
+2025-12-13 07:25:07,183 - INFO - Interrupção recebida. Parando serviço...
+2025-12-13 07:25:07,198 - INFO - Servidor parado
+2025-12-13 07:25:07,199 - INFO - VIRTUS Dashboard Service Encerrado
+2025-12-13 07:25:08,685 - INFO - ============================================================
+2025-12-13 07:25:08,686 - INFO - VIRTUS Dashboard Service Iniciando
+2025-12-13 07:25:08,686 - INFO - Backend: C:\Users\Administrator\Desktop\Virtus\brain\dashboard\backend
+2025-12-13 07:25:08,686 - INFO - Porta: 8000
+2025-12-13 07:25:08,687 - INFO - ============================================================
+2025-12-13 07:25:08,689 - INFO - Iniciando servidor: C:\Users\Administrator\AppData\Local\Programs\Python\Python311\python.exe -m uvicorn main:app --host 0.0.0.0 --port 8000 --workers 2 --log-level info
+--- Logging error ---
+Traceback (most recent call last):
+  File "C:\Users\Administrator\AppData\Local\Programs\Python\Python311\Lib\logging\__init__.py", line 1113, in emit
+    stream.write(msg + self.terminator)
+  File "C:\Users\Administrator\AppData\Local\Programs\Python\Python311\Lib\encodings\cp1252.py", line 19, in encode
+    return codecs.charmap_encode(input,self.errors,encoding_table)[0]
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+UnicodeEncodeError: 'charmap' codec can't encode character '\u2713' in position 33: character maps to <undefined>
+Call stack:
+  File "C:\Users\Administrator\Desktop\Virtus\brain\dashboard\backend\windows_service.py", line 251, in <module>
+    main()
+  File "C:\Users\Administrator\Desktop\Virtus\brain\dashboard\backend\windows_service.py", line 247, in main
+    service.run()
+  File "C:\Users\Administrator\Desktop\Virtus\brain\dashboard\backend\windows_service.py", line 207, in run
+    if not self.start_server():
+  File "C:\Users\Administrator\Desktop\Virtus\brain\dashboard\backend\windows_service.py", line 127, in start_server
+    logger.info(f"\u2713 Servidor iniciado com sucesso na porta {self.port}")
+Message: '\u2713 Servidor iniciado com sucesso na porta 8000'
+Arguments: ()
+2025-12-13 07:25:11,703 - INFO - \u2713 Servidor iniciado com sucesso na porta 8000
+2025-12-13 07:37:03,623 - INFO - Interrupção recebida. Parando serviço...
+2025-12-13 07:37:03,636 - INFO - Servidor parado
+2025-12-13 07:37:03,636 - INFO - VIRTUS Dashboard Service Encerrado
+2025-12-13 07:37:04,385 - INFO - ============================================================
+2025-12-13 07:37:04,385 - INFO - VIRTUS Dashboard Service Iniciando
+2025-12-13 07:37:04,386 - INFO - Backend: C:\Users\Administrator\Desktop\Virtus\brain\dashboard\backend
+2025-12-13 07:37:04,386 - INFO - Porta: 8000
+2025-12-13 07:37:04,386 - INFO - ============================================================
+2025-12-13 07:37:04,389 - INFO - Iniciando servidor: C:\Users\Administrator\AppData\Local\Programs\Python\Python311\python.exe -m uvicorn main:app --host 0.0.0.0 --port 8000 --workers 2 --log-level info
+--- Logging error ---
+Traceback (most recent call last):
+  File "C:\Users\Administrator\AppData\Local\Programs\Python\Python311\Lib\logging\__init__.py", line 1113, in emit
+    stream.write(msg + self.terminator)
+  File "C:\Users\Administrator\AppData\Local\Programs\Python\Python311\Lib\encodings\cp1252.py", line 19, in encode
+    return codecs.charmap_encode(input,self.errors,encoding_table)[0]
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+UnicodeEncodeError: 'charmap' codec can't encode character '\u2713' in position 33: character maps to <undefined>
+Call stack:
+  File "C:\Users\Administrator\Desktop\Virtus\brain\dashboard\backend\windows_service.py", line 251, in <module>
+    main()
+  File "C:\Users\Administrator\Desktop\Virtus\brain\dashboard\backend\windows_service.py", line 247, in main
+    service.run()
+  File "C:\Users\Administrator\Desktop\Virtus\brain\dashboard\backend\windows_service.py", line 207, in run
+    if not self.start_server():
+  File "C:\Users\Administrator\Desktop\Virtus\brain\dashboard\backend\windows_service.py", line 127, in start_server
+    logger.info(f"\u2713 Servidor iniciado com sucesso na porta {self.port}")
+Message: '\u2713 Servidor iniciado com sucesso na porta 8000'
+Arguments: ()
+2025-12-13 07:37:07,404 - INFO - \u2713 Servidor iniciado com sucesso na porta 8000
+2025-12-13 07:45:43,928 - INFO - ============================================================
+2025-12-13 07:45:43,928 - INFO - VIRTUS Dashboard Service Iniciando
+2025-12-13 07:45:43,928 - INFO - Backend: C:\Users\Administrator\Desktop\Virtus\brain\dashboard\backend
+2025-12-13 07:45:43,929 - INFO - Porta: 8000
+2025-12-13 07:45:43,929 - INFO - ============================================================
+2025-12-13 07:45:43,931 - INFO - Iniciando servidor: C:\Users\Administrator\AppData\Local\Programs\Python\Python311\python.exe -m uvicorn main:app --host 0.0.0.0 --port 8000 --workers 2 --log-level info
+--- Logging error ---
+Traceback (most recent call last):
+  File "C:\Users\Administrator\AppData\Local\Programs\Python\Python311\Lib\logging\__init__.py", line 1113, in emit
+    stream.write(msg + self.terminator)
+  File "C:\Users\Administrator\AppData\Local\Programs\Python\Python311\Lib\encodings\cp1252.py", line 19, in encode
+    return codecs.charmap_encode(input,self.errors,encoding_table)[0]
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+UnicodeEncodeError: 'charmap' codec can't encode character '\u2713' in position 33: character maps to <undefined>
+Call stack:
+  File "C:\Users\Administrator\Desktop\Virtus\brain\dashboard\backend\windows_service.py", line 251, in <module>
+    main()
+  File "C:\Users\Administrator\Desktop\Virtus\brain\dashboard\backend\windows_service.py", line 247, in main
+    service.run()
+  File "C:\Users\Administrator\Desktop\Virtus\brain\dashboard\backend\windows_service.py", line 207, in run
+    if not self.start_server():
+  File "C:\Users\Administrator\Desktop\Virtus\brain\dashboard\backend\windows_service.py", line 127, in start_server
+    logger.info(f"\u2713 Servidor iniciado com sucesso na porta {self.port}")
+Message: '\u2713 Servidor iniciado com sucesso na porta 8000'
+Arguments: ()
+2025-12-13 07:45:46,950 - INFO - \u2713 Servidor iniciado com sucesso na porta 8000
+2025-12-13 07:57:21,034 - INFO - Interrupção recebida. Parando serviço...
+2025-12-13 07:57:21,050 - INFO - Servidor parado
+2025-12-13 07:57:21,051 - INFO - VIRTUS Dashboard Service Encerrado
+2025-12-13 07:57:21,773 - INFO - ============================================================
+2025-12-13 07:57:21,774 - INFO - VIRTUS Dashboard Service Iniciando
+2025-12-13 07:57:21,775 - INFO - Backend: C:\Users\Administrator\Desktop\Virtus\brain\dashboard\backend
+2025-12-13 07:57:21,775 - INFO - Porta: 8000
+2025-12-13 07:57:21,775 - INFO - ============================================================
+2025-12-13 07:57:21,777 - INFO - Iniciando servidor: C:\Users\Administrator\AppData\Local\Programs\Python\Python311\python.exe -m uvicorn main:app --host 0.0.0.0 --port 8000 --workers 2 --log-level info
+--- Logging error ---
+Traceback (most recent call last):
+  File "C:\Users\Administrator\AppData\Local\Programs\Python\Python311\Lib\logging\__init__.py", line 1113, in emit
+    stream.write(msg + self.terminator)
+  File "C:\Users\Administrator\AppData\Local\Programs\Python\Python311\Lib\encodings\cp1252.py", line 19, in encode
+    return codecs.charmap_encode(input,self.errors,encoding_table)[0]
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+UnicodeEncodeError: 'charmap' codec can't encode character '\u2713' in position 33: character maps to <undefined>
+Call stack:
+  File "C:\Users\Administrator\Desktop\Virtus\brain\dashboard\backend\windows_service.py", line 251, in <module>
+    main()
+  File "C:\Users\Administrator\Desktop\Virtus\brain\dashboard\backend\windows_service.py", line 247, in main
+    service.run()
+  File "C:\Users\Administrator\Desktop\Virtus\brain\dashboard\backend\windows_service.py", line 207, in run
+    if not self.start_server():
+  File "C:\Users\Administrator\Desktop\Virtus\brain\dashboard\backend\windows_service.py", line 127, in start_server
+    logger.info(f"\u2713 Servidor iniciado com sucesso na porta {self.port}")
+Message: '\u2713 Servidor iniciado com sucesso na porta 8000'
+Arguments: ()
+2025-12-13 07:57:24,791 - INFO - \u2713 Servidor iniciado com sucesso na porta 8000
+2025-12-13 10:34:30,875 - INFO - Interrupção recebida. Parando serviço...
+2025-12-13 10:34:30,889 - INFO - Servidor parado
+2025-12-13 10:34:30,889 - INFO - VIRTUS Dashboard Service Encerrado

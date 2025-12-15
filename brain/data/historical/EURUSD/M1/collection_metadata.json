@@ -1,0 +1,20 @@
+{
+  "symbol": "EURUSD",
+  "timeframe": "M1",
+  "total_candles": 99909,
+  "start_date": "2025-09-08 13:33:00",
+  "end_date": "2025-12-15 02:03:00",
+  "columns": [
+    "time",
+    "open",
+    "high",
+    "low",
+    "close",
+    "tick_volume",
+    "spread",
+    "real_volume",
+    "symbol",
+    "timeframe"
+  ],
+  "collected_at": "2025-12-14T18:03:46.537898"
+}

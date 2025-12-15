@@ -1,130 +1,244 @@
-# ============================================================
-# 🧠 BRAIN SERVICE - Configuração do Serviço Central
-# ============================================================
+# ============================================================================
+# VIRTUS - Brain Central Configuration
+# Gerenciamento de APIs, Cache e Budget
+# ============================================================================
 
-# Cache compartilhado
-cache:
-  # Backend: redis | memory
-  backend: "memory"
+brain:
+  name: "VIRTUS Brain"
+  version: "1.0.0"
   
+  # Modo de operação
+  mode: "hybrid"  # online | offline | hybrid
+
+# ============================================================================
+# CACHE COMPARTILHADO
+# ============================================================================
+cache:
   # TTL (Time To Live) em segundos
   ttl:
-    news: 900           # 15 minutos
-    sentiment: 600      # 10 minutos
-    calendar: 3600      # 1 hora
-    cot: 86400          # 1 dia
-    macro: 3600         # 1 hora
-    technical: 60       # 1 minuto
-    
-  # Tamanho máximo do cache em memória (itens)
-  max_size: 1000
+    news: 900              # 15 minutos
+    sentiment: 600         # 10 minutos
+    calendar: 3600         # 1 hora
+    cot: 86400             # 1 dia
+    macro: 3600            # 1 hora
+    forex_rates: 60        # 1 minuto
+    technical: 300         # 5 minutos
+  
+  # Persistência
+  persist_to_disk: true
+  persist_path: "../data/brain/cache"
+  
+  # Limpeza
+  cleanup_interval: 3600   # 1 hora
+  max_entries: 10000
 
-# Budget de APIs (controle de gastos)
+# ============================================================================
+# BUDGET DE APIs (Controle de Chamadas)
+# ============================================================================
 budget:
-  # ForexNews API
-  forexnews:
-    monthly_limit: 5000
-    daily_limit: 166
-    requests_per_minute: 10
-    priority: "high"
+  # Estado persistente
+  state_file: "../data/brain/budget_state.json"
+  reset_hour: 0            # Hora UTC para reset diário
   
-  # Finnhub API
-  finnhub:
-    monthly_limit: 1000
-    daily_limit: 33
-    requests_per_minute: 30
-    priority: "medium"
-  
-  # COT Reports
-  cot:
-    weekly_limit: 50
-    daily_limit: 7
-    priority: "low"
-  
-  # Economic Calendar (gratuito)
-  calendar:
-    daily_limit: 100
-    requests_per_minute: 10
-    priority: "high"
+  # Limites por provider
+  providers:
+    forexnews:
+      monthly_limit: 5000
+      daily_limit: 166      # 5000/30
+      min_interval_ms: 1000 # 1 segundo entre chamadas
+      priority: 1           # Maior prioridade
+      
+    finnhub:
+      monthly_limit: 30000  # 60 calls/min free tier
+      daily_limit: 1000
+      min_interval_ms: 1000
+      priority: 2
+      
+    twelvedata:
+      monthly_limit: 800    # Free tier: 800/day
+      daily_limit: 800
+      min_interval_ms: 1000
+      priority: 3
+      
+    financialmodelingprep:
+      monthly_limit: 250    # Free tier: 250/day
+      daily_limit: 250
+      min_interval_ms: 1000
+      priority: 4
+      
+    finazon:
+      monthly_limit: 500    # Backup
+      daily_limit: 50
+      min_interval_ms: 2000
+      priority: 5
 
-# Providers de dados
+# ============================================================================
+# PROVIDERS DE DADOS
+# ============================================================================
 providers:
-  forexnews:
-    enabled: true
-    api_key: null  # Definir via variável de ambiente FOREXNEWS_API_KEY
-    base_url: "https://api.forexnewsapi.com"
+  # Notícias
+  news:
+    primary: "forexnews"
+    fallback: ["finnhub"]
     
-  finnhub:
-    enabled: true
-    api_key: null  # Definir via variável de ambiente FINNHUB_API_KEY
-    base_url: "https://finnhub.io/api/v1"
-    
-  cot:
-    enabled: true
-    source: "cftc"
-    base_url: "https://www.cftc.gov/dea/futures"
-    
+  # Calendário Econômico
   calendar:
-    enabled: true
-    source: "investing"
+    primary: "finnhub"
+    fallback: ["financialmodelingprep"]
     
-  translation:
-    enabled: true
-    provider: "google"  # google | deepl
-    target_language: "pt"
+  # Sentimento
+  sentiment:
+    primary: "forexnews"
+    fallback: ["finnhub"]
+    
+  # COT (Commitment of Traders)
+  cot:
+    primary: "financialmodelingprep"
+    fallback: []
+    
+  # Forex Rates
+  forex_rates:
+    primary: "twelvedata"
+    fallback: ["finnhub", "finazon"]
+    
+  # Indicadores Técnicos
+  technical:
+    primary: "twelvedata"
+    fallback: ["financialmodelingprep"]
 
-# Analyzers
+# ============================================================================
+# FOREXNEWS API
+# ============================================================================
+forexnews:
+  base_url: "https://forexnewsapi.com/api/v1"
+  endpoints:
+    news: "/news"
+    sentiment: "/sentiment"
+    events: "/events"
+    trending: "/trending"
+  
+  # Filtros padrão
+  default_filters:
+    min_sentiment: -1.0
+    max_sentiment: 1.0
+    sources: []            # Vazio = todas
+    
+  # Mapeamento de símbolos
+  symbol_mapping:
+    XAUUSD: ["XAU", "GOLD", "gold"]
+    EURUSD: ["EUR", "EURUSD"]
+    GBPUSD: ["GBP", "GBPUSD", "cable"]
+
+# ============================================================================
+# FINNHUB API
+# ============================================================================
+finnhub:
+  base_url: "https://finnhub.io/api/v1"
+  endpoints:
+    market_news: "/news"
+    company_news: "/company-news"
+    forex_rates: "/forex/rates"
+    forex_candles: "/forex/candle"
+    calendar: "/calendar/economic"
+    sentiment: "/news-sentiment"
+  
+  # Categorias de notícias
+  news_categories:
+    - "forex"
+    - "general"
+    - "crypto"
+    - "merger"
+
+# ============================================================================
+# TWELVEDATA API
+# ============================================================================
+twelvedata:
+  base_url: "https://api.twelvedata.com"
+  endpoints:
+    time_series: "/time_series"
+    price: "/price"
+    exchange_rate: "/exchange_rate"
+    forex_pairs: "/forex_pairs"
+    technical: "/technical_indicators"
+    quote: "/quote"
+  
+  # Intervalos suportados
+  intervals:
+    - "1min"
+    - "5min"
+    - "15min"
+    - "30min"
+    - "1h"
+    - "4h"
+    - "1day"
+
+# ============================================================================
+# FINANCIALMODELINGPREP API
+# ============================================================================
+financialmodelingprep:
+  base_url: "https://financialmodelingprep.com/api/v3"
+  endpoints:
+    forex_quote: "/quote"
+    forex_list: "/fx"
+    economic_calendar: "/economic_calendar"
+    cot: "/cot"
+    news: "/fmp/articles"
+
+# ============================================================================
+# FINAZON API (BACKUP)
+# ============================================================================
+finazon:
+  base_url: "https://api.finazon.io/latest"
+  endpoints:
+    forex_tickers: "/finazon/forex/tickers"
+    time_series: "/time_series"
+
+# ============================================================================
+# ANALYZERS (ANÁLISES DO BRAIN)
+# ============================================================================
 analyzers:
   news:
     enabled: true
-    min_relevance_score: 0.5
-    max_age_hours: 24
+    sentiment_threshold:
+      bullish: 0.3
+      bearish: -0.3
+    importance_weight:
+      high: 1.0
+      medium: 0.6
+      low: 0.3
+    max_news_age_hours: 24
     
   sentiment:
     enabled: true
-    model: "finbert"  # finbert | vader | combined
+    sources:
+      - news
+      - social
+      - institutional
+    aggregation: "weighted_average"
     
   macro:
     enabled: true
     indicators:
-      - "DXY"      # Dollar Index
-      - "VIX"      # Volatility Index
-      - "US10Y"    # Treasury 10Y
-      - "SPX"      # S&P 500
-      
+      - "DXY"              # Dollar Index
+      - "VIX"              # Volatility Index
+      - "US10Y"            # Treasury 10Y
+      - "SPX"              # S&P 500
+    update_interval: 3600  # 1 hora
+    
   correlation:
     enabled: true
-    lookback_periods: 50
-    update_interval: 3600  # 1 hora
+    pairs:
+      - ["XAUUSD", "DXY"]
+      - ["EURUSD", "GBPUSD"]
+      - ["XAUUSD", "EURUSD"]
+    window: 20             # Período para cálculo
+    alert_threshold: 0.8   # Alerta se correlação > 0.8
 
-# Símbolos suportados e suas configurações
-symbols:
-  XAUUSD:
-    name: "Gold"
-    type: "commodity"
-    pip_value: 0.01
-    related_currencies: ["USD"]
-    cot_code: "088691"
-    news_keywords: ["gold", "ouro", "xau", "precious metals"]
-    
-  EURUSD:
-    name: "Euro/Dollar"
-    type: "forex"
-    pip_value: 0.0001
-    related_currencies: ["EUR", "USD"]
-    cot_code: "099741"
-    news_keywords: ["euro", "eur", "ecb", "european"]
-    
-  GBPUSD:
-    name: "Pound/Dollar"
-    type: "forex"
-    pip_value: 0.0001
-    related_currencies: ["GBP", "USD"]
-    cot_code: "096742"
-    news_keywords: ["pound", "gbp", "sterling", "boe", "british"]
-
-# Alocação de prioridade para budget
-priority_allocation:
-  high: 0.5     # 50% do budget
-  normal: 0.35  # 35% do budget
-  low: 0.15     # 15% do budget
+# ============================================================================
+# TRADUÇÃO
+# ============================================================================
+translation:
+  enabled: true
+  target_language: "pt"
+  provider: "internal"     # internal | google | deepl
+  cache_translations: true

@@ -1,0 +1,77 @@
+# VIRTUS Bot Configuration - Arbitragem Crypto
+# =============================================
+# 
+# Bot de arbitragem entre exchanges de criptomoedas
+#
+
+name: "Arbitragem Crypto"
+bot_type: arbitrage
+market: binance  # Exchange primária
+
+# Símbolos para monitorar
+symbols:
+  - BTC/USDT
+  - ETH/USDT
+  - SOL/USDT
+  - BNB/USDT
+
+# Estratégias ativas
+strategies:
+  - cross_exchange    # Arbitragem entre exchanges
+  - triangular        # Arbitragem triangular
+
+# Configurações de risco
+max_position_size: 0.5    # 50% do capital por operação
+max_daily_loss: 500.0     # Perda máxima diária em USD
+max_drawdown: 5.0         # Drawdown máximo 5%
+risk_per_trade: 2.0       # Risco por trade 2%
+
+# Operacional
+enabled: true
+auto_start: false
+
+# Configurações específicas de arbitragem
+extra:
+  # Tipo de arbitragem
+  arb_type: cross_exchange
+  
+  # Spread mínimo para executar (%)
+  min_spread_pct: 0.15
+  
+  # Latência máxima aceitável (ms)
+  max_latency_ms: 50
+  
+  # Exchanges para arbitragem
+  exchanges:
+    - name: binance
+      api_key_env: BINANCE_API_KEY
+      api_secret_env: BINANCE_API_SECRET
+      testnet: false
+      
+    - name: bybit
+      api_key_env: BYBIT_API_KEY
+      api_secret_env: BYBIT_API_SECRET
+      testnet: false
+      
+    - name: kraken
+      api_key_env: KRAKEN_API_KEY
+      api_secret_env: KRAKEN_API_SECRET
+  
+  # Pares para arbitragem triangular
+  triangular_pairs:
+    - base: BTC
+      quote: USDT
+      intermediate: ETH
+    - base: ETH
+      quote: USDT
+      intermediate: BNB
+  
+  # Intervalo do loop (segundos)
+  loop_interval: 0.1
+  
+  # Tamanho mínimo de ordem
+  min_order_size:
+    BTC: 0.001
+    ETH: 0.01
+    SOL: 0.1
+    BNB: 0.05

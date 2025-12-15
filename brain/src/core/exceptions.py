@@ -1,18 +1,24 @@
 """
-BRAIN - Exceções Customizadas
-Exceções específicas do sistema
+VIRTUS Core - Exceptions
+========================
+
+Exceções customizadas do sistema.
 """
 
 from typing import Optional, Any
 
 
-class BrainException(Exception):
-    """Exceção base do sistema BRAIN"""
+# ============================================================================
+# BASE EXCEPTIONS
+# ============================================================================
+
+class VirtusError(Exception):
+    """Exceção base do sistema VIRTUS"""
     
     def __init__(self, message: str, details: Optional[Any] = None):
+        super().__init__(message)
         self.message = message
         self.details = details
-        super().__init__(self.message)
     
     def __str__(self):
         if self.details:
@@ -20,31 +26,103 @@ class BrainException(Exception):
         return self.message
 
 
-# ============================================================
-# Exceções de Configuração
-# ============================================================
+# ============================================================================
+# CONFIGURATION ERRORS
+# ============================================================================
 
-class ConfigError(BrainException):
+class ConfigurationError(VirtusError):
     """Erro de configuração"""
     pass
 
 
-class ConfigNotFoundError(ConfigError):
+class ConfigNotFoundError(ConfigurationError):
     """Arquivo de configuração não encontrado"""
     pass
 
 
-class ConfigValidationError(ConfigError):
+class InvalidConfigError(ConfigurationError):
     """Configuração inválida"""
     pass
 
 
-# ============================================================
-# Exceções do Brain Service
-# ============================================================
+# ============================================================================
+# MT5 ERRORS
+# ============================================================================
 
-class BrainError(BrainException):
-    """Erro no serviço Brain"""
+class MT5Error(VirtusError):
+    """Erro relacionado ao MetaTrader 5"""
+    pass
+
+
+class MT5ConnectionError(MT5Error):
+    """Erro de conexão com MT5"""
+    pass
+
+
+class MT5AuthenticationError(MT5Error):
+    """Erro de autenticação no MT5"""
+    pass
+
+
+class MT5OrderError(MT5Error):
+    """Erro ao processar ordem no MT5"""
+    pass
+
+
+class MT5SymbolError(MT5Error):
+    """Erro relacionado a símbolo no MT5"""
+    pass
+
+
+class MT5DataError(MT5Error):
+    """Erro ao obter dados do MT5"""
+    pass
+
+
+# ============================================================================
+# API ERRORS
+# ============================================================================
+
+class APIError(VirtusError):
+    """Erro de API externa"""
+    
+    def __init__(self, message: str, provider: str = "", 
+                 status_code: Optional[int] = None, details: Optional[Any] = None):
+        super().__init__(message, details)
+        self.provider = provider
+        self.status_code = status_code
+
+
+class APIConnectionError(APIError):
+    """Erro de conexão com API"""
+    pass
+
+
+class APIRateLimitError(APIError):
+    """Rate limit excedido"""
+    
+    def __init__(self, message: str, provider: str = "", 
+                 retry_after: Optional[int] = None, **kwargs):
+        super().__init__(message, provider, **kwargs)
+        self.retry_after = retry_after
+
+
+class APIAuthenticationError(APIError):
+    """Erro de autenticação na API"""
+    pass
+
+
+class APIResponseError(APIError):
+    """Erro na resposta da API"""
+    pass
+
+
+# ============================================================================
+# BRAIN ERRORS
+# ============================================================================
+
+class BrainError(VirtusError):
+    """Erro no módulo Brain"""
     pass
 
 
@@ -56,45 +134,41 @@ class CacheError(BrainError):
 class BudgetExceededError(BrainError):
     """Budget de API excedido"""
     
-    def __init__(self, provider: str, limit: int, used: int):
+    def __init__(self, message: str, provider: str = "", 
+                 budget_limit: float = 0, current_usage: float = 0, **kwargs):
+        super().__init__(message, **kwargs)
         self.provider = provider
-        self.limit = limit
-        self.used = used
-        super().__init__(
-            f"Budget excedido para {provider}",
-            {"limit": limit, "used": used}
-        )
+        self.budget_limit = budget_limit
+        self.current_usage = current_usage
 
 
-class ProviderError(BrainError):
-    """Erro em provider de dados"""
-    
-    def __init__(self, provider: str, message: str, original_error: Optional[Exception] = None):
-        self.provider = provider
-        self.original_error = original_error
-        super().__init__(f"[{provider}] {message}", str(original_error) if original_error else None)
-
-
-class RateLimitError(ProviderError):
-    """Rate limit atingido"""
+class ProviderUnavailableError(BrainError):
+    """Provider não disponível"""
     pass
 
 
-# ============================================================
-# Exceções de Trading/Bot
-# ============================================================
-
-class TradingError(BrainException):
-    """Erro de trading"""
+class NoDataError(BrainError):
+    """Nenhum dado disponível"""
     pass
 
 
-class BotError(TradingError):
-    """Erro no bot"""
-    
-    def __init__(self, bot_id: str, message: str, details: Optional[Any] = None):
-        self.bot_id = bot_id
-        super().__init__(f"[{bot_id}] {message}", details)
+# ============================================================================
+# BOT ERRORS
+# ============================================================================
+
+class BotError(VirtusError):
+    """Erro relacionado a um bot"""
+    pass
+
+
+class BotStartupError(BotError):
+    """Erro ao iniciar bot"""
+    pass
+
+
+class BotShutdownError(BotError):
+    """Erro ao parar bot"""
+    pass
 
 
 class BotNotFoundError(BotError):
@@ -103,219 +177,126 @@ class BotNotFoundError(BotError):
 
 
 class BotAlreadyRunningError(BotError):
-    """Bot já está rodando"""
+    """Bot já está em execução"""
     pass
 
 
-class BotNotRunningError(BotError):
-    """Bot não está rodando"""
+# ============================================================================
+# STRATEGY ERRORS
+# ============================================================================
+
+class StrategyError(VirtusError):
+    """Erro em estratégia"""
     pass
 
 
-# ============================================================
-# Exceções de MT5
-# ============================================================
-
-class MT5Error(TradingError):
-    """Erro do MetaTrader 5"""
-    pass
-
-
-class MT5ConnectionError(MT5Error):
-    """Erro de conexão com MT5"""
-    pass
-
-
-class MT5OrderError(MT5Error):
-    """Erro ao executar ordem"""
-    
-    def __init__(self, order_type: str, symbol: str, error_code: int, error_message: str):
-        self.order_type = order_type
-        self.symbol = symbol
-        self.error_code = error_code
-        self.error_message = error_message
-        super().__init__(
-            f"Erro ao executar {order_type} em {symbol}: [{error_code}] {error_message}",
-            {"code": error_code, "message": error_message}
-        )
-
-
-class MT5DataError(MT5Error):
-    """Erro ao obter dados do MT5"""
-    pass
-
-
-# ============================================================
-# Exceções de Posição
-# ============================================================
-
-class PositionError(TradingError):
-    """Erro de posição"""
-    pass
-
-
-class PositionNotFoundError(PositionError):
-    """Posição não encontrada"""
-    
-    def __init__(self, ticket: int):
-        self.ticket = ticket
-        super().__init__(f"Posição {ticket} não encontrada")
-
-
-class PositionModificationError(PositionError):
-    """Erro ao modificar posição"""
-    pass
-
-
-class PositionCloseError(PositionError):
-    """Erro ao fechar posição"""
-    pass
-
-
-# ============================================================
-# Exceções de Risco
-# ============================================================
-
-class RiskError(TradingError):
-    """Erro de risco"""
-    pass
-
-
-class MaxPositionsError(RiskError):
-    """Número máximo de posições atingido"""
-    
-    def __init__(self, current: int, max_allowed: int, scope: str = "global"):
-        self.current = current
-        self.max_allowed = max_allowed
-        self.scope = scope
-        super().__init__(
-            f"Máximo de posições ({scope}) atingido: {current}/{max_allowed}",
-            {"current": current, "max": max_allowed}
-        )
-
-
-class DailyLossLimitError(RiskError):
-    """Limite de perda diária atingido"""
-    
-    def __init__(self, current_loss: float, limit: float, bot_id: Optional[str] = None):
-        self.current_loss = current_loss
-        self.limit = limit
-        self.bot_id = bot_id
-        scope = f"bot {bot_id}" if bot_id else "global"
-        super().__init__(
-            f"Limite de perda diária ({scope}) atingido: ${current_loss:.2f}/${limit:.2f}",
-            {"current": current_loss, "limit": limit}
-        )
-
-
-class DrawdownLimitError(RiskError):
-    """Limite de drawdown atingido"""
-    
-    def __init__(self, current_dd: float, limit: float):
-        self.current_dd = current_dd
-        self.limit = limit
-        super().__init__(
-            f"Limite de drawdown atingido: {current_dd:.2f}%/{limit:.2f}%",
-            {"current": current_dd, "limit": limit}
-        )
-
-
-class CorrelationRiskError(RiskError):
-    """Risco de correlação excedido"""
-    
-    def __init__(self, symbol1: str, symbol2: str, correlation: float, limit: float):
-        self.symbol1 = symbol1
-        self.symbol2 = symbol2
-        self.correlation = correlation
-        self.limit = limit
-        super().__init__(
-            f"Correlação alta entre {symbol1} e {symbol2}: {correlation:.2f} (limite: {limit:.2f})",
-            {"symbols": [symbol1, symbol2], "correlation": correlation}
-        )
-
-
-# ============================================================
-# Exceções de Estratégia
-# ============================================================
-
-class StrategyError(TradingError):
-    """Erro de estratégia"""
+class InvalidSignalError(StrategyError):
+    """Sinal inválido"""
     pass
 
 
 class StrategyNotFoundError(StrategyError):
     """Estratégia não encontrada"""
-    
-    def __init__(self, strategy_name: str):
-        self.strategy_name = strategy_name
-        super().__init__(f"Estratégia '{strategy_name}' não encontrada")
-
-
-class StrategyValidationError(StrategyError):
-    """Erro de validação de estratégia"""
     pass
 
 
-# ============================================================
-# Exceções de Análise
-# ============================================================
+# ============================================================================
+# POSITION ERRORS
+# ============================================================================
 
-class AnalysisError(BrainException):
-    """Erro de análise"""
+class PositionError(VirtusError):
+    """Erro em posição"""
+    pass
+
+
+class PositionNotFoundError(PositionError):
+    """Posição não encontrada"""
+    pass
+
+
+class InvalidPositionSizeError(PositionError):
+    """Tamanho de posição inválido"""
+    pass
+
+
+class MaxPositionsExceededError(PositionError):
+    """Máximo de posições excedido"""
+    pass
+
+
+# ============================================================================
+# RISK ERRORS
+# ============================================================================
+
+class RiskError(VirtusError):
+    """Erro no sistema de risco"""
+    pass
+
+
+class RiskLimitExceededError(RiskError):
+    """Limite de risco excedido"""
+    pass
+
+
+class DrawdownLimitError(RiskError):
+    """Limite de drawdown atingido"""
+    pass
+
+
+class DailyLossLimitError(RiskError):
+    """Limite de perda diária atingido"""
+    pass
+
+
+# ============================================================================
+# ANALYSIS ERRORS
+# ============================================================================
+
+class AnalysisError(VirtusError):
+    """Erro em análise"""
     pass
 
 
 class InsufficientDataError(AnalysisError):
     """Dados insuficientes para análise"""
-    
-    def __init__(self, required: int, available: int, data_type: str = "candles"):
-        self.required = required
-        self.available = available
-        self.data_type = data_type
-        super().__init__(
-            f"Dados insuficientes para análise: {available}/{required} {data_type}",
-            {"required": required, "available": available}
-        )
+    pass
 
 
-# ============================================================
-# Exceções de ML
-# ============================================================
+class IndicatorError(AnalysisError):
+    """Erro ao calcular indicador"""
+    pass
 
-class MLError(BrainException):
-    """Erro de Machine Learning"""
+
+# ============================================================================
+# ML ERRORS
+# ============================================================================
+
+class MLError(VirtusError):
+    """Erro no módulo de Machine Learning"""
     pass
 
 
 class ModelNotFoundError(MLError):
     """Modelo não encontrado"""
-    
-    def __init__(self, model_name: str, symbol: Optional[str] = None):
-        self.model_name = model_name
-        self.symbol = symbol
-        msg = f"Modelo '{model_name}'"
-        if symbol:
-            msg += f" para {symbol}"
-        msg += " não encontrado"
-        super().__init__(msg)
+    pass
 
 
-class ModelLoadError(MLError):
-    """Erro ao carregar modelo"""
+class ModelTrainingError(MLError):
+    """Erro no treinamento de modelo"""
     pass
 
 
 class PredictionError(MLError):
-    """Erro ao fazer predição"""
+    """Erro na predição"""
     pass
 
 
-# ============================================================
-# Exceções de Telegram
-# ============================================================
+# ============================================================================
+# TELEGRAM ERRORS
+# ============================================================================
 
-class TelegramError(BrainException):
-    """Erro do Telegram"""
+class TelegramError(VirtusError):
+    """Erro no módulo Telegram"""
     pass
 
 
@@ -324,6 +305,44 @@ class TelegramConnectionError(TelegramError):
     pass
 
 
-class TelegramSendError(TelegramError):
+class TelegramMessageError(TelegramError):
     """Erro ao enviar mensagem"""
+    pass
+
+
+# ============================================================================
+# DATABASE ERRORS
+# ============================================================================
+
+class DatabaseError(VirtusError):
+    """Erro de banco de dados"""
+    pass
+
+
+class DatabaseConnectionError(DatabaseError):
+    """Erro de conexão com banco"""
+    pass
+
+
+class RecordNotFoundError(DatabaseError):
+    """Registro não encontrado"""
+    pass
+
+
+# ============================================================================
+# ORCHESTRATOR ERRORS
+# ============================================================================
+
+class OrchestratorError(VirtusError):
+    """Erro no orquestrador"""
+    pass
+
+
+class BotRegistrationError(OrchestratorError):
+    """Erro ao registrar bot"""
+    pass
+
+
+class BotSupervisorError(OrchestratorError):
+    """Erro no supervisor de bots"""
     pass

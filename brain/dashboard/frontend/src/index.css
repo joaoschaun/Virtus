@@ -1,0 +1,410 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ==================== BASE STYLES ==================== */
+
+:root {
+  --virtus-bg-primary: #0c0c10;
+  --virtus-bg-secondary: #121216;
+  --virtus-bg-card: #16161b;
+  --virtus-border: #2a2a32;
+  --virtus-accent: #E53935;
+  --virtus-accent-light: #FF5252;
+  --virtus-success: #10b981;
+  --virtus-danger: #ef4444;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  font-size: 14px;
+  scroll-behavior: smooth;
+}
+
+body {
+  background: var(--virtus-bg-primary);
+  color: #ffffff;
+  font-family: 'Inter', system-ui, sans-serif;
+  min-height: 100vh;
+}
+
+/* ==================== SCROLLBAR ==================== */
+
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--virtus-bg-secondary);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--virtus-border);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--virtus-accent);
+}
+
+/* ==================== COMPONENTS ==================== */
+
+@layer components {
+  /* Cards */
+  .card {
+    @apply bg-virtus-bg-card border border-virtus-border-primary rounded-xl p-3 sm:p-6 shadow-virtus;
+  }
+  
+  .card-hover {
+    @apply card transition-all duration-200 hover:border-virtus-border-secondary hover:shadow-virtus-lg;
+  }
+  
+  /* Buttons */
+  .btn {
+    @apply px-3 sm:px-4 py-2 rounded-lg font-medium transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed text-sm sm:text-base;
+  }
+  
+  .btn-primary {
+    @apply btn bg-gradient-virtus text-white hover:opacity-90 hover:shadow-glow;
+  }
+  
+  .btn-secondary {
+    @apply btn bg-virtus-bg-tertiary text-virtus-text-primary border border-virtus-border-primary hover:border-virtus-border-secondary hover:bg-virtus-bg-hover;
+  }
+  
+  .btn-success {
+    @apply btn bg-virtus-accent-success text-white hover:opacity-90 hover:shadow-glow-success;
+  }
+  
+  .btn-danger {
+    @apply btn bg-virtus-accent-danger text-white hover:opacity-90 hover:shadow-glow-danger;
+  }
+  
+  .btn-ghost {
+    @apply btn bg-transparent text-virtus-text-secondary hover:bg-virtus-bg-hover hover:text-virtus-text-primary;
+  }
+  
+  /* Inputs */
+  .input {
+    @apply w-full px-4 py-3 bg-virtus-bg-tertiary border border-virtus-border-primary rounded-lg text-virtus-text-primary placeholder:text-virtus-text-muted focus:outline-none focus:border-virtus-accent-primary focus:ring-1 focus:ring-virtus-accent-primary transition-all duration-200;
+  }
+  
+  .input-error {
+    @apply input border-virtus-accent-danger focus:border-virtus-accent-danger focus:ring-virtus-accent-danger;
+  }
+  
+  /* Select */
+  .select {
+    @apply input appearance-none cursor-pointer pr-10;
+    background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236a6a7a' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e");
+    background-size: 20px;
+    background-repeat: no-repeat;
+    background-position: right 12px center;
+  }
+  
+  /* Labels */
+  .label {
+    @apply block text-sm font-medium text-virtus-text-secondary mb-2;
+  }
+  
+  /* Tables */
+  .table-container {
+    @apply w-full overflow-x-auto -mx-3 sm:mx-0 px-3 sm:px-0;
+  }
+  
+  .table {
+    @apply w-full text-left min-w-[500px] sm:min-w-0;
+  }
+  
+  .table th {
+    @apply px-2 sm:px-4 py-2 sm:py-3 text-xs font-semibold text-virtus-text-muted uppercase tracking-wider bg-virtus-bg-tertiary border-b border-virtus-border-primary whitespace-nowrap;
+  }
+  
+  .table td {
+    @apply px-2 sm:px-4 py-2 sm:py-3 text-xs sm:text-sm border-b border-virtus-border-primary whitespace-nowrap;
+  }
+  
+  .table tbody tr {
+    @apply hover:bg-virtus-bg-hover transition-colors duration-150;
+  }
+  
+  /* Badges */
+  .badge {
+    @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium;
+  }
+  
+  .badge-success {
+    @apply badge bg-virtus-accent-success/20 text-virtus-accent-success;
+  }
+  
+  .badge-danger {
+    @apply badge bg-virtus-accent-danger/20 text-virtus-accent-danger;
+  }
+  
+  .badge-warning {
+    @apply badge bg-virtus-accent-warning/20 text-virtus-accent-warning;
+  }
+  
+  .badge-info {
+    @apply badge bg-virtus-accent-info/20 text-virtus-accent-info;
+  }
+  
+  .badge-primary {
+    @apply badge bg-virtus-accent-primary/20 text-virtus-accent-primary;
+  }
+  
+  /* Stats Card */
+  .stat-card {
+    @apply card flex flex-col gap-1 sm:gap-2;
+  }
+  
+  .stat-label {
+    @apply text-[10px] sm:text-xs font-medium text-virtus-text-muted uppercase tracking-wider;
+  }
+  
+  .stat-value {
+    @apply text-lg sm:text-2xl font-bold text-virtus-text-primary;
+  }
+  
+  .stat-change {
+    @apply text-sm font-medium;
+  }
+  
+  .stat-change-positive {
+    @apply stat-change text-virtus-accent-success;
+  }
+  
+  .stat-change-negative {
+    @apply stat-change text-virtus-accent-danger;
+  }
+  
+  /* Toggle Switch */
+  .toggle {
+    @apply relative inline-flex h-6 w-11 items-center rounded-full transition-colors duration-200 focus:outline-none cursor-pointer;
+  }
+  
+  .toggle-enabled {
+    @apply toggle bg-virtus-accent-success;
+  }
+  
+  .toggle-disabled {
+    @apply toggle bg-virtus-border-primary;
+  }
+  
+  .toggle-dot {
+    @apply inline-block h-4 w-4 rounded-full bg-white transition-transform duration-200;
+  }
+  
+  .toggle-dot-enabled {
+    @apply toggle-dot translate-x-6;
+  }
+  
+  .toggle-dot-disabled {
+    @apply toggle-dot translate-x-1;
+  }
+  
+  /* Sidebar */
+  .sidebar {
+    @apply fixed left-0 top-0 h-screen w-64 bg-virtus-bg-secondary border-r border-virtus-border-primary flex flex-col z-50;
+    /* Mobile: hidden by default */
+    @apply -translate-x-full lg:translate-x-0 transition-transform duration-300 ease-in-out;
+  }
+  
+  .sidebar-mobile-open {
+    @apply translate-x-0;
+  }
+  
+  .sidebar-link {
+    @apply flex items-center gap-3 px-4 py-3 text-virtus-text-secondary hover:bg-virtus-bg-hover hover:text-virtus-text-primary transition-colors duration-200 rounded-lg mx-2;
+  }
+  
+  .sidebar-link-active {
+    @apply sidebar-link bg-virtus-accent-primary/10 text-virtus-accent-primary border-l-2 border-virtus-accent-primary;
+  }
+  
+  /* Header */
+  .header {
+    @apply fixed top-0 left-0 right-0 lg:left-64 h-14 sm:h-16 bg-virtus-bg-secondary/80 backdrop-blur-lg border-b border-virtus-border-primary flex items-center justify-between px-3 sm:px-6 z-30;
+  }
+  
+  /* Main Content */
+  .main-content {
+    @apply lg:ml-64 mt-14 sm:mt-16 p-3 sm:p-6 min-h-[calc(100vh-3.5rem)] sm:min-h-[calc(100vh-4rem)] pb-20 lg:pb-6;
+  }
+  
+  /* Mobile Bottom Navigation */
+  .mobile-bottom-nav {
+    @apply fixed bottom-0 left-0 right-0 h-16 bg-virtus-bg-secondary/95 backdrop-blur-lg border-t border-virtus-border-primary flex items-center justify-around px-2 z-40 lg:hidden;
+  }
+  
+  .mobile-nav-item {
+    @apply flex flex-col items-center justify-center gap-1 py-2 px-3 text-virtus-text-muted transition-colors;
+  }
+  
+  .mobile-nav-item-active {
+    @apply text-virtus-accent-primary;
+  }
+  
+  /* Modal */
+  .modal-overlay {
+    @apply fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-3 sm:p-4;
+  }
+  
+  .modal {
+    @apply bg-virtus-bg-card border border-virtus-border-primary rounded-xl shadow-virtus-lg w-full max-w-lg max-h-[90vh] overflow-y-auto;
+  }
+  
+  .modal-header {
+    @apply px-4 sm:px-6 py-3 sm:py-4 border-b border-virtus-border-primary flex items-center justify-between sticky top-0 bg-virtus-bg-card;
+  }
+  
+  .modal-body {
+    @apply px-4 sm:px-6 py-3 sm:py-4;
+  }
+  
+  .modal-footer {
+    @apply px-4 sm:px-6 py-3 sm:py-4 border-t border-virtus-border-primary flex flex-col sm:flex-row items-center justify-end gap-2 sm:gap-3 sticky bottom-0 bg-virtus-bg-card;
+  }
+  
+  /* Loading */
+  .loading-spinner {
+    @apply animate-spin rounded-full border-2 border-virtus-border-primary border-t-virtus-accent-primary;
+  }
+  
+  /* Charts */
+  .chart-container {
+    @apply w-full h-48 sm:h-64;
+  }
+  
+  /* Tabs */
+  .tabs {
+    @apply flex border-b border-virtus-border-primary overflow-x-auto no-scrollbar;
+  }
+  
+  .tab {
+    @apply px-3 sm:px-4 py-2 sm:py-3 text-xs sm:text-sm font-medium text-virtus-text-secondary hover:text-virtus-text-primary transition-colors duration-200 border-b-2 border-transparent -mb-px whitespace-nowrap;
+  }
+  
+  .tab-active {
+    @apply tab text-virtus-accent-primary border-virtus-accent-primary;
+  }
+  
+  /* Profit/Loss Colors */
+  .profit {
+    @apply text-virtus-accent-success;
+  }
+  
+  .loss {
+    @apply text-virtus-accent-danger;
+  }
+}
+
+/* ==================== UTILITIES ==================== */
+
+@layer utilities {
+  .gradient-text {
+    @apply bg-gradient-virtus bg-clip-text text-transparent;
+  }
+  
+  .glass {
+    @apply bg-virtus-bg-card/80 backdrop-blur-lg;
+  }
+  
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+  
+  .no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  
+  /* Virtus Brand Accents */
+  .virtus-border-accent {
+    @apply border-l-2 border-virtus-accent-primary;
+  }
+  
+  .virtus-glow {
+    box-shadow: 0 0 30px rgba(229, 57, 53, 0.15);
+  }
+  
+  .virtus-card-accent {
+    @apply relative overflow-hidden;
+  }
+  
+  .virtus-card-accent::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 2px;
+    background: linear-gradient(90deg, #E53935, #FF5252, transparent);
+  }
+}
+
+/* ==================== RECHARTS CUSTOM ==================== */
+
+.recharts-cartesian-grid-horizontal line,
+.recharts-cartesian-grid-vertical line {
+  stroke: var(--virtus-border);
+  stroke-opacity: 0.5;
+}
+
+.recharts-text {
+  fill: #6a6a7a;
+  font-size: 11px;
+}
+
+.recharts-tooltip-wrapper {
+  outline: none;
+}
+
+.custom-tooltip {
+  @apply bg-virtus-bg-card border border-virtus-border-primary rounded-lg p-3 shadow-virtus-lg;
+}
+
+/* ==================== ANIMATIONS ==================== */
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes slideUp {
+  from { 
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to { 
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes slideDown {
+  from { 
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to { 
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fadeIn {
+  animation: fadeIn 0.2s ease-out;
+}
+
+.animate-slideUp {
+  animation: slideUp 0.3s ease-out;
+}
+
+.animate-slideDown {
+  animation: slideDown 0.3s ease-out;
+}

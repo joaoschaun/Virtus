@@ -1,0 +1,222 @@
+# =========================================================
+# VIRTUS ML - Configuração de Modelos
+# =========================================================
+
+ml:
+  enabled: true
+  default_device: "auto"  # auto, cpu, cuda
+  
+  # =====================================================
+  # Feature Engineering
+  # =====================================================
+  features:
+    technical:
+      - sma
+      - ema
+      - rsi
+      - macd
+      - bbands
+      - atr
+      - adx
+    candlestick_patterns:
+      - hammer
+      - shooting_star
+      - doji
+      - engulfing
+      - morning_star
+      - evening_star
+      - three_white_soldiers
+      - three_black_crows
+    custom:
+      - body_shadow_ratio
+      - price_momentum
+      - volatility_ratio
+      - volume_profile
+
+  # =====================================================
+  # LSTM Configuration
+  # =====================================================
+  lstm:
+    enabled: true
+    architecture: "stacked"  # simple, stacked, bidirectional, attention, cnn_lstm, gru
+    
+    # Arquitetura
+    input_size: 50
+    hidden_units: [128, 64, 32]
+    num_layers: 3
+    dropout: 0.2
+    recurrent_dropout: 0.1
+    output_size: 3  # BUY, SELL, NEUTRAL
+    bidirectional: true
+    use_attention: true
+    
+    # Sequência
+    sequence_length: 60
+    prediction_horizon: 1
+    
+    # Treinamento
+    batch_size: 32
+    learning_rate: 0.001
+    epochs: 100
+    early_stopping_patience: 10
+    reduce_lr_patience: 5
+    reduce_lr_factor: 0.5
+    
+    # Regularização
+    l1_reg: 0.0
+    l2_reg: 0.0001
+    gradient_clip: 1.0
+
+  # =====================================================
+  # k-NN Pattern Classifier
+  # =====================================================
+  knn:
+    enabled: true
+    
+    # Configuração do classificador
+    n_neighbors: 7
+    weights: "distance"  # uniform, distance
+    metric: "euclidean"  # euclidean, manhattan, cosine
+    algorithm: "auto"    # auto, ball_tree, kd_tree, brute
+    
+    # Features
+    lookback: 5
+    distance_threshold: 0.5
+    min_confidence: 0.3
+    
+    # Padrões suportados
+    patterns:
+      single_candle:
+        - doji
+        - hammer
+        - inverted_hammer
+        - hanging_man
+        - shooting_star
+        - marubozu_bull
+        - marubozu_bear
+        - spinning_top
+      double_candle:
+        - bullish_engulfing
+        - bearish_engulfing
+        - piercing_line
+        - dark_cloud
+        - tweezer_top
+        - tweezer_bottom
+        - harami_bull
+        - harami_bear
+      triple_candle:
+        - morning_star
+        - evening_star
+        - three_white_soldiers
+        - three_black_crows
+        - three_inside_up
+        - three_inside_down
+
+  # =====================================================
+  # CNN Vision Model
+  # =====================================================
+  cnn:
+    enabled: true
+    
+    # Imagem
+    image_size: [224, 224]
+    lookback_candles: 50
+    include_volume: true
+    background_color: "black"
+    style: "candlestick"  # candlestick, line, ohlc
+    
+    # Arquitetura
+    backbone: "mobilenet"  # mobilenet, resnet, custom
+    pretrained: true
+    num_classes: 3  # BUY, SELL, NEUTRAL
+    
+    # Transfer Learning
+    freeze_backbone: true
+    unfreeze_at_epoch: 5
+    
+    # Treinamento
+    batch_size: 16
+    learning_rate: 0.0001
+    epochs: 50
+    early_stopping_patience: 8
+    
+    # Augmentation
+    augmentation:
+      enabled: true
+      horizontal_flip: false  # Não faz sentido para charts
+      brightness: 0.1
+      contrast: 0.1
+
+  # =====================================================
+  # Ensemble Configuration
+  # =====================================================
+  ensemble:
+    enabled: true
+    method: "weighted_voting"  # weighted_voting, stacking, boosting
+    
+    weights:
+      lstm: 0.4
+      knn: 0.3
+      cnn: 0.3
+    
+    # Regras de votação
+    min_agreement: 2  # Pelo menos 2 modelos devem concordar
+    min_confidence: 0.65
+    
+    # Ajuste dinâmico de pesos
+    dynamic_weights: true
+    weight_decay: 0.95  # Decaimento de peso por erro
+    weight_boost: 1.05  # Boost de peso por acerto
+
+  # =====================================================
+  # RNN Configuration (alternativa ao LSTM)
+  # =====================================================
+  rnn:
+    enabled: false
+    
+    cell_type: "gru"  # gru, rnn
+    hidden_size: 64
+    num_layers: 2
+    dropout: 0.3
+    bidirectional: false
+
+  # =====================================================
+  # Transformer Configuration (experimental)
+  # =====================================================
+  transformer:
+    enabled: false
+    
+    d_model: 128
+    nhead: 8
+    num_encoder_layers: 4
+    dim_feedforward: 512
+    dropout: 0.1
+    max_seq_length: 100
+
+# =====================================================
+# Configuração por Símbolo
+# =====================================================
+symbols:
+  EURUSD:
+    preferred_model: "lstm"
+    ensemble_weights:
+      lstm: 0.5
+      knn: 0.25
+      cnn: 0.25
+    min_confidence: 0.7
+    
+  GBPUSD:
+    preferred_model: "lstm"
+    ensemble_weights:
+      lstm: 0.45
+      knn: 0.30
+      cnn: 0.25
+    min_confidence: 0.68
+    
+  XAUUSD:
+    preferred_model: "ensemble"
+    ensemble_weights:
+      lstm: 0.35
+      knn: 0.35
+      cnn: 0.30
+    min_confidence: 0.72

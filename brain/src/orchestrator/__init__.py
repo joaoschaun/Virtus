@@ -1,9 +1,20 @@
-# Orchestrator Module
-# Gerenciador de múltiplos bots
+"""
+VIRTUS Orchestrator Module
+===========================
 
-from .bot_orchestrator import BotOrchestrator
-from .bot_registry import BotRegistry
-from .bot_supervisor import BotSupervisor
-from .load_balancer import LoadBalancer
+Orquestrador central de bots de trading.
+"""
 
-__all__ = ['BotOrchestrator', 'BotRegistry', 'BotSupervisor', 'LoadBalancer']
+from .bot_orchestrator import (
+    BotOrchestrator,
+    BotRegistry,
+    BotSupervisor,
+    get_orchestrator,
+)
+
+__all__ = [
+    'BotOrchestrator',
+    'BotRegistry',
+    'BotSupervisor',
+    'get_orchestrator',
+]
