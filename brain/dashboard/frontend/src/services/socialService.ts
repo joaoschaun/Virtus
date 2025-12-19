@@ -29,6 +29,28 @@ export interface NewsPostRequest {
   sentiment?: string;
 }
 
+export interface NewsItem {
+  id: string;
+  title: string;
+  summary: string;
+  content?: string;
+  source: string;
+  category: string;
+  sentiment: string;
+  published_at: string;
+  url?: string;
+  tickers?: string[];
+}
+
+export interface SelectedNewsRequest {
+  title: string;
+  summary: string;
+  sentiment: string;
+  category: string;
+  tickers: string[];
+  source: string;
+}
+
 export const socialService = {
   // Status
   getStatus: async () => {
@@ -58,13 +80,15 @@ export const socialService = {
     return response.data;
   },
 
-  // Imagem
+  // Imagem - URL relativa funciona com Nginx proxy
   getImageUrl: (filename: string) => {
-    return `${api.defaults.baseURL}/api/social/image/${filename}`;
+    const baseUrl = api.defaults.baseURL || '';
+    return `${baseUrl}/api/social/image/${encodeURIComponent(filename)}`;
   },
 
   getDownloadUrl: (filename: string) => {
-    return `${api.defaults.baseURL}/api/social/download/${filename}`;
+    const baseUrl = api.defaults.baseURL || '';
+    return `${baseUrl}/api/social/download/${encodeURIComponent(filename)}`;
   },
 
   // Ações
@@ -96,6 +120,23 @@ export const socialService = {
 
   getPendingPosts: async () => {
     const response = await api.get('/api/social/pending');
+    return response.data;
+  },
+
+  // Notícias para seleção manual
+  getBrazilNews: async (limit: number = 10): Promise<{ news: NewsItem[] }> => {
+    const response = await api.get(`/api/social/news/brazil?limit=${limit}`);
+    return response.data;
+  },
+
+  getAllNews: async (limit: number = 15): Promise<{ news: NewsItem[] }> => {
+    const response = await api.get(`/api/social/news/all?limit=${limit}`);
+    return response.data;
+  },
+
+  // Gerar post de notícia selecionada
+  generateFromSelectedNews: async (data: SelectedNewsRequest) => {
+    const response = await api.post('/api/social/generate/from-selected-news', data);
     return response.data;
   },
 };

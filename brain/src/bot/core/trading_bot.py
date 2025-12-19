@@ -16,7 +16,7 @@ from .bot_state import (
 )
 from .trading_engine import TradingEngine, TradingMode, ExecutionMode, TradeDecision
 from ...core import (
-    Config, VirtusLogger, Signal, SignalType, Position, PositionStatus,
+    Config, VirtusLogger, Signal, SignalType, SignalStrength, Position, PositionStatus,
     BotError, MT5Error
 )
 from ...brain import BrainService, get_brain
@@ -127,12 +127,22 @@ class TradingBot:
             
             # ============================================
             # INICIALIZA TRADING ENGINE (MOTOR AVANÇADO)
+            # Passa as estratégias configuradas no YAML do bot
             # ============================================
+            
+            # Obtém estratégias habilitadas do YAML do bot
+            enabled_strategies = self._get_enabled_strategies()
+            bot_yaml_config = self._get_bot_yaml_config()
+            
+            self.logger.info(f"📊 Estratégias do YAML: {enabled_strategies}")
+            
             self.engine = TradingEngine(
                 symbol=self.symbol,
                 mode=self.trading_mode,
                 execution_mode=ExecutionMode.NORMAL,
                 risk_per_trade=self._get_risk_per_trade(),
+                enabled_strategies=enabled_strategies,  # NOVO: passa estratégias do YAML
+                bot_config=bot_yaml_config,  # NOVO: passa config completa
             )
             
             engine_ok = await self.engine.initialize(self._account_balance)
@@ -165,8 +175,56 @@ class TradingBot:
         """Obtém risco por trade da configuração."""
         for bc in self.config.bots:
             if bc.symbol == self.symbol:
-                return bc.risk.get('risk_per_trade', 0.01)
+                return bc.risk.get('risk_per_trade', bc.risk.get('max_risk_per_trade', 0.01))
         return 0.01  # 1% padrão
+    
+    def _get_enabled_strategies(self) -> List[str]:
+        """
+        Obtém lista de estratégias habilitadas do YAML do bot.
+        
+        Returns:
+            Lista de nomes de estratégias habilitadas
+        """
+        for bc in self.config.bots:
+            if bc.symbol == self.symbol:
+                strategies_config = bc.strategies
+                # Obtém lista de estratégias habilitadas
+                enabled_list = strategies_config.get('enabled', [])
+                
+                # Se não houver lista, verifica estratégias individuais
+                if not enabled_list:
+                    enabled_list = []
+                    for strategy_name in ['scalping', 'trend_following', 'trend', 
+                                         'reversal', 'event', 'breakout', 'range_trading']:
+                        strategy_cfg = strategies_config.get(strategy_name, {})
+                        if strategy_cfg.get('enabled', False):
+                            enabled_list.append(strategy_name)
+                
+                self.logger.debug(f"Estratégias encontradas para {self.symbol}: {enabled_list}")
+                return enabled_list
+        
+        return []  # Retorna vazio se não encontrar config
+    
+    def _get_bot_yaml_config(self) -> Dict[str, Any]:
+        """
+        Obtém configuração completa do bot do YAML.
+        
+        Returns:
+            Dict com toda a configuração do bot
+        """
+        for bc in self.config.bots:
+            if bc.symbol == self.symbol:
+                return {
+                    'id': bc.id,
+                    'name': bc.name,
+                    'symbol': bc.symbol,
+                    'strategies': bc.strategies,
+                    'risk': bc.risk,
+                    'positions': bc.positions,
+                    'ml': bc.ml,
+                    'analysis': bc.analysis,
+                }
+        return {}
     
     async def _load_bot_config(self) -> None:
         """Carrega configuração específica do bot."""
@@ -368,17 +426,23 @@ class TradingBot:
         """
         try:
             await self.state_manager.set_phase(TradingPhase.ANALYZING)
+            self.logger.info(f"🔍 [{self.symbol}] Iniciando análise de mercado...")
             
             # Verifica condições básicas
             if not self._check_basic_conditions():
+                self.logger.info(f"⚠️ [{self.symbol}] Condições básicas não atendidas")
                 return
             
             # Obtém dados do Brain e MT5
             market_data = await self._get_market_data()
+            if not market_data:
+                self.logger.info(f"⚠️ [{self.symbol}] Sem dados de mercado")
+                return
             
             # Obtém preço atual
             tick = await self.mt5_data.get_price(self.symbol)
             if not tick:
+                self.logger.info(f"⚠️ [{self.symbol}] Sem cotação atual")
                 return
             current_price = tick.get('last') or tick.get('bid')
             
@@ -417,7 +481,7 @@ class TradingBot:
                 else:
                     # Sem trade - log rejections se houver
                     if decision.rejections:
-                        self.logger.debug(f"Sem trade: {', '.join(decision.rejections[:2])}")
+                        self.logger.info(f"⏭️ Sem trade: {', '.join(decision.rejections[:3])}")
             else:
                 # Fallback para lógica básica se Engine não inicializado
                 await self._analyze_market_fallback(market_data)
@@ -428,23 +492,26 @@ class TradingBot:
     def _decision_to_signal(self, decision: TradeDecision) -> Signal:
         """Converte TradeDecision para Signal."""
         signal_type = SignalType.BUY if decision.direction == "buy" else SignalType.SELL
+        
+        # Mapeia confiança para SignalStrength
+        if decision.confidence >= 0.8:
+            strength = SignalStrength.STRONG
+        elif decision.confidence >= 0.6:
+            strength = SignalStrength.MODERATE
+        else:
+            strength = SignalStrength.WEAK
+            
         return Signal(
             symbol=self.symbol,
             type=signal_type,
-            strength=decision.confidence,
-            confidence=decision.confidence,
-            source=f"engine.{decision.strategy_used}",
+            strength=strength,
             timestamp=decision.timestamp,
-            metadata={
-                'setup': decision.setup_name,
-                'entry': decision.entry_price,
-                'sl': decision.stop_loss,
-                'tp': decision.take_profit,
-                'size': decision.position_size,
-                'risk_reward': decision.risk_reward,
-                'kelly': decision.kelly_fraction,
-                'confirmations': decision.confirmations,
-            }
+            entry_price=decision.entry_price,
+            stop_loss=decision.stop_loss,
+            take_profit=decision.take_profit,
+            strategy=decision.strategy_used,
+            confidence=decision.confidence,
+            reasons=decision.confirmations,
         )
     
     async def _execute_engine_decision(self, decision: TradeDecision) -> None:
@@ -453,43 +520,46 @@ class TradingBot:
             await self.state_manager.set_phase(TradingPhase.ENTERING)
             
             # Parâmetros já calculados pelo Engine
-            order_type = "buy" if decision.direction == "buy" else "sell"
+            from ...core.types import OrderType
+            order_type = OrderType.BUY if decision.direction == "buy" else OrderType.SELL
             
             self.logger.info(
-                f"📊 Executando: {order_type.upper()} {decision.position_size} lots @ {decision.entry_price:.5f}"
+                f"📊 Executando: {order_type.value} {decision.position_size} lots @ {decision.entry_price:.5f}"
             )
             self.logger.info(
                 f"   SL: {decision.stop_loss:.5f} | TP: {decision.take_profit:.5f}"
             )
             
-            # Executa ordem
-            result = self.mt5_orders.place_market_order(
+            # Executa ordem via MT5 - send_market_order é async
+            result = await self.mt5_orders.send_market_order(
                 symbol=self.symbol,
                 order_type=order_type,
                 volume=decision.position_size,
-                sl=decision.stop_loss,
-                tp=decision.take_profit,
+                stop_loss=decision.stop_loss,
+                take_profit=decision.take_profit,
                 comment=f"VIRTUS_{self.bot_id}_{decision.strategy_used}"
             )
             
-            if result and result.retcode == 10009:  # TRADE_RETCODE_DONE
+            if result and result.get('success'):
+                ticket = result.get('ticket', 0)
                 self.logger.success(
-                    f"✅ Ordem executada: #{result.order} "
+                    f"✅ Ordem executada: #{ticket} "
                     f"({decision.strategy_used} - {decision.setup_name})"
                 )
                 self.state_manager.statistics.record_signal(executed=True)
                 
-                # Cria posição
-                signal_type = SignalType.BUY if decision.direction == "buy" else SignalType.SELL
+                # Cria posição - order_type deve ser OrderType, não SignalType
+                from ...core.types import OrderType
+                order_type = OrderType.BUY if decision.direction == "buy" else OrderType.SELL
                 self.current_position = Position(
-                    ticket=result.order,
+                    ticket=ticket,
                     symbol=self.symbol,
-                    type=signal_type,
+                    order_type=order_type,
                     volume=decision.position_size,
-                    open_price=decision.entry_price,
-                    current_price=decision.entry_price,
-                    sl=decision.stop_loss,
-                    tp=decision.take_profit,
+                    entry_price=result.get('price', decision.entry_price),
+                    current_price=result.get('price', decision.entry_price),
+                    stop_loss=decision.stop_loss,
+                    take_profit=decision.take_profit,
                     profit=0.0,
                     status=PositionStatus.OPEN,
                     open_time=datetime.now(),
@@ -508,7 +578,7 @@ class TradingBot:
                     except Exception:
                         pass
             else:
-                error = result.comment if result else "Erro desconhecido"
+                error = result.get('error', 'Erro desconhecido') if result else "Erro desconhecido"
                 self.logger.error(f"❌ Erro ao executar ordem: {error}")
                 
         except Exception as e:
@@ -542,12 +612,38 @@ class TradingBot:
         """Verifica condições básicas para operar."""
         ctx = self.state_manager.context
         
+        # Calcula spread máximo baseado no símbolo
+        # Para Gold/Indices: spread em pontos (ex: XAUUSD spread ~0.10-0.50)
+        # Para Forex: spread em pips (ex: EURUSD spread ~0.00010-0.00030)
+        is_gold = self.symbol.upper().startswith("XAU")
+        is_index = self.symbol.upper() in ["US30", "US500", "US100", "GER40"]
+        
+        if is_gold:
+            max_spread = 3.0  # $3.00 de spread máximo para ouro
+        elif is_index:
+            max_spread = 5.0  # 5 pontos para índices
+        else:
+            max_spread = self._max_spread_pips * 0.0001  # Forex: pips em decimal
+        
+        # Log dos valores atuais
+        self.logger.debug(
+            f"📊 Condições: spread={ctx.spread:.5f} (max={max_spread:.5f}), "
+            f"volatility={ctx.volatility:.5f} (min={self._min_volatility:.5f}, max={self._max_volatility:.5f})"
+        )
+        
         # Spread muito alto
-        if ctx.spread > self._max_spread_pips * 0.0001:
+        if ctx.spread > max_spread:
+            self.logger.info(f"⚠️ Spread muito alto: {ctx.spread:.5f} > {max_spread:.5f}")
             return False
+        
+        # Para volatilidade 0, assumimos que ainda não foi calculada - permite trade
+        if ctx.volatility == 0:
+            self.logger.debug(f"⚠️ Volatilidade não calculada ainda, permitindo análise")
+            return True
         
         # Volatilidade fora do range
         if ctx.volatility < self._min_volatility or ctx.volatility > self._max_volatility:
+            self.logger.info(f"⚠️ Volatilidade fora do range: {ctx.volatility:.5f} (esperado: {self._min_volatility:.5f} - {self._max_volatility:.5f})")
             return False
         
         return True

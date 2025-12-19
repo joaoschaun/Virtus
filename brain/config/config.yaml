@@ -14,8 +14,8 @@ system:
 # ============================================================================
 mt5:
   path: "C:\\Program Files\\Pepperstone MetaTrader 5\\terminal64.exe"
-  login: 61446576
-  password: "Joao8804"
+  login: 61444598
+  password: "Joao8804."
   server: "Pepperstone-Demo"
   timeout: 60000
   retries: 3
@@ -43,6 +43,7 @@ api_keys:
   finazon: "830c05bb65994f99ae39629a0e9f8edffw"
   twelvedata: "a0f59fab7a354ce080c93b0b019e5e61"
   financialmodelingprep: "ZvAVZ4inPZ4mtTnJ4cuLSQYYSrLQcfkr"
+  eodhd: "694154fa05aa82.59300876"  # EODHD Financial Data API
 
 # ============================================================================
 # SÍMBOLOS ATIVOS

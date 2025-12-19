@@ -58,11 +58,14 @@ export default function AnalysisPage() {
         analysisAPI.getAttribution(),
       ])
       
-      setHourlyData(perfRes.data.hourly_performance)
-      setWeekdayData(perfRes.data.weekday_performance)
-      setAttribution(attrRes.data)
+      setHourlyData(perfRes.data?.hourly_performance || [])
+      setWeekdayData(perfRes.data?.weekday_performance || [])
+      setAttribution(attrRes.data || null)
     } catch (error) {
       console.error('Failed to load analysis:', error)
+      setHourlyData([])
+      setWeekdayData([])
+      setAttribution(null)
     } finally {
       setIsLoading(false)
     }

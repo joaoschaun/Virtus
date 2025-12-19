@@ -11,11 +11,14 @@ import sys
 import asyncio
 import hashlib
 import secrets
+import signal
+import subprocess
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Any, Set
 from contextlib import asynccontextmanager
 from pathlib import Path
 
+import psutil
 from fastapi import FastAPI, HTTPException, Depends, WebSocket, WebSocketDisconnect, status, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
@@ -23,8 +26,12 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 import jwt
 
-# Adicionar path do src para imports do sistema VIRTUS
+# Carregar variáveis de ambiente do .env
+from dotenv import load_dotenv
 BRAIN_PATH = Path(__file__).parent.parent.parent
+load_dotenv(BRAIN_PATH / ".env")
+
+# Adicionar path do src para imports do sistema VIRTUS
 sys.path.insert(0, str(BRAIN_PATH))
 sys.path.insert(0, str(BRAIN_PATH / "src"))
 
@@ -33,7 +40,7 @@ try:
     from src.database.manager import DatabaseManager, DatabaseConfig, get_database
     from src.database.repositories import TradeRepository, SignalRepository, PerformanceRepository
     from src.database.models import Trade, Signal, DailyPerformance
-    from src.core.config import ConfigLoader
+    from src.core.config import Config
     from src.core.logger import VirtusLogger
     VIRTUS_AVAILABLE = True
 except ImportError as e:
@@ -54,21 +61,25 @@ except ImportError as e:
 
 class Settings:
     """Configurações do servidor."""
-    # Chave secreta fixa para manter tokens válidos entre restarts
-    SECRET_KEY: str = os.getenv("VIRTUS_SECRET_KEY", "virtus_dashboard_secret_key_2024_production_fixed_k3y!")
+    # Chave secreta - DEVE ser configurada via variável de ambiente
+    SECRET_KEY: str = os.getenv("VIRTUS_SECRET_KEY", "")
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_HOURS: int = 24
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7
     
-    # Usuários (em produção, usar banco de dados)
+    # Usuários - senhas configuráveis via variáveis de ambiente
+    # Em produção, usar banco de dados para gerenciar usuários
+    _admin_pwd = os.getenv("VIRTUS_ADMIN_PASSWORD", "MUDE_ESTA_SENHA!")
+    _trader_pwd = os.getenv("VIRTUS_TRADER_PASSWORD", "MUDE_ESTA_SENHA!")
+    
     USERS: Dict[str, Dict] = {
         "admin": {
-            "password_hash": hashlib.sha256("virtus2024!".encode()).hexdigest(),
+            "password_hash": hashlib.sha256(_admin_pwd.encode()).hexdigest(),
             "role": "admin",
             "name": "Administrador",
         },
         "trader": {
-            "password_hash": hashlib.sha256("trader123".encode()).hexdigest(),
+            "password_hash": hashlib.sha256(_trader_pwd.encode()).hexdigest(),
             "role": "trader",
             "name": "Trader",
         }
@@ -619,25 +630,38 @@ class AppState:
             if self.trade_repo:
                 stats = self.trade_repo.get_statistics()
                 if stats:
-                    return stats
+                    # Mapear para os campos esperados pelo frontend
+                    return {
+                        "total_trades": stats.get("total_trades", 0),
+                        "winning_trades": stats.get("winning_trades", 0),
+                        "losing_trades": stats.get("losing_trades", 0),
+                        "win_rate": stats.get("win_rate", 0),
+                        "total_pnl": stats.get("net_profit", stats.get("total_pnl", 0)),
+                        "gross_profit": stats.get("total_profit", stats.get("gross_profit", 0)),
+                        "gross_loss": stats.get("total_loss", stats.get("gross_loss", 0)),
+                        "profit_factor": stats.get("profit_factor", 0),
+                        "avg_win": stats.get("average_win", stats.get("avg_win", 0)),
+                        "avg_loss": stats.get("average_loss", stats.get("avg_loss", 0)),
+                        "largest_win": stats.get("largest_win", 0),
+                        "largest_loss": stats.get("largest_loss", 0),
+                    }
         except Exception as e:
             print(f"Warning: Could not calculate stats: {e}")
         
-        # Mock
+        # Mock com os campos corretos para o frontend
         return {
             "total_trades": 156,
             "winning_trades": 98,
             "losing_trades": 58,
             "win_rate": 62.82,
-            "total_profit": 4250.00,
-            "total_loss": -2300.00,
-            "net_profit": 1950.00,
+            "total_pnl": 1950.00,
+            "gross_profit": 4250.00,
+            "gross_loss": -2300.00,
             "profit_factor": 1.85,
-            "average_win": 43.37,
-            "average_loss": -39.66,
+            "avg_win": 43.37,
+            "avg_loss": -39.66,
             "largest_win": 245.00,
             "largest_loss": -125.00,
-            "average_duration_minutes": 67,
         }
 
 
@@ -723,6 +747,10 @@ app = FastAPI(
 
 # ==================== ROUTERS ====================
 
+# Importa e registra router de health check (deve vir primeiro para monitoramento)
+from routes.health_routes import router as health_router
+app.include_router(health_router, prefix="/api")
+
 # Importa e registra router de notícias
 from routes.news_routes import router as news_router
 app.include_router(news_router, prefix="/api")
@@ -731,9 +759,109 @@ app.include_router(news_router, prefix="/api")
 from routes.multi_bot_routes import router as multi_bot_router
 app.include_router(multi_bot_router, prefix="/api")
 
+# Importa e registra router Brain API (integração com sistema de trading)
+from routes.brain_routes import router as brain_router
+app.include_router(brain_router)
+
 # Importa e registra router de social media
 from routes.social_routes import router as social_router
 app.include_router(social_router, prefix="/api")
+
+# Importa e registra router de bots externos (Thanos, etc)
+from routes.external_bots_routes import router as external_bots_router
+app.include_router(external_bots_router)
+
+# Importa e registra router EODHD (dados financeiros)
+from routes.eodhd_routes import router as eodhd_router
+app.include_router(eodhd_router, prefix="/api")
+
+# Importa e registra router Forex Briefing (notícias, calendário, sinais)
+from routes.forex_routes import router as forex_router
+app.include_router(forex_router)
+
+# Importa e registra router Dividend Capture Bot (ações com dividendos)
+from routes.dividend_bot_routes import router as dividend_bot_router
+app.include_router(dividend_bot_router)
+
+# Importa e registra router Daily Briefing (briefing diário completo)
+from routes.briefing_routes import router as briefing_router
+app.include_router(briefing_router)
+
+# Importa e registra router Portal Público (site principal)
+from routes.portal_routes import router as portal_router
+app.include_router(portal_router)
+
+# Importa e registra router Portfólio e Brain de Dividendos
+from routes.dividend_portfolio_routes import router as dividend_portfolio_router
+app.include_router(dividend_portfolio_router)
+
+# ==================== NOVOS MÓDULOS v3.1 ====================
+
+# Paper Trading - Simulação de trades
+try:
+    from routes.paper_routes import router as paper_router
+    app.include_router(paper_router, prefix="/api")
+except ImportError as e:
+    print(f"Warning: Paper Trading routes not available: {e}")
+
+# Plugins de Estratégias
+try:
+    from routes.plugins_routes import router as plugins_router
+    app.include_router(plugins_router, prefix="/api")
+except ImportError as e:
+    print(f"Warning: Plugin routes not available: {e}")
+
+# Métricas Prometheus
+try:
+    from routes.metrics_routes import router as metrics_router
+    app.include_router(metrics_router)
+except ImportError as e:
+    print(f"Warning: Metrics routes not available: {e}")
+
+# Relatórios PDF/HTML
+try:
+    from routes.reports_routes import router as reports_router
+    app.include_router(reports_router, prefix="/api")
+except ImportError as e:
+    print(f"Warning: Reports routes not available: {e}")
+
+# Sistema de Auditoria
+try:
+    from routes.audit_routes import router as audit_router
+    app.include_router(audit_router, prefix="/api")
+except ImportError as e:
+    print(f"Warning: Audit routes not available: {e}")
+
+# Monitor de Drawdown
+try:
+    from routes.drawdown_routes import router as drawdown_router
+    app.include_router(drawdown_router, prefix="/api")
+except ImportError as e:
+    print(f"Warning: Drawdown routes not available: {e}")
+
+# API Brapi - Mercado Brasileiro
+try:
+    from routes.brapi_routes import router as brapi_router
+    app.include_router(brapi_router, prefix="/api")
+    print("✅ Brapi routes loaded - Mercado Brasileiro disponível")
+except ImportError as e:
+    print(f"Warning: Brapi routes not available: {e}")
+
+# Screener Inteligente B3
+try:
+    from routes.screener_routes import router as screener_router
+    app.include_router(screener_router, prefix="/api")
+    print("✅ Screener routes loaded - Screener Inteligente disponível")
+except ImportError as e:
+    print(f"Warning: Screener routes not available: {e}")
+
+# Carteira de FIIs
+try:
+    from routes.fii_portfolio_routes import router as fii_portfolio_router
+    app.include_router(fii_portfolio_router, prefix="/api")
+    print("✅ FII Portfolio routes loaded - Carteira de FIIs disponível")
+except ImportError as e:
+    print(f"Warning: FII Portfolio routes not available: {e}")
 
 # CORS
 app.add_middleware(
@@ -922,6 +1050,197 @@ async def create_test_notification(user: dict = Depends(get_current_user)):
     return notification.dict()
 
 
+# ==================== ROUTES: BOT INTEGRATION ====================
+
+@app.post("/api/bot/state")
+async def update_bot_state(state: dict):
+    """
+    Endpoint para o bot principal enviar estado atualizado.
+    Alternativa ao WebSocket para casos de fallback.
+    """
+    try:
+        if "mt5_connected" in state:
+            app_state.mt5_connected = state["mt5_connected"]
+        if "account" in state:
+            app_state.mt5_account = state["account"]
+        if "positions" in state:
+            app_state.positions = state["positions"]
+        if "metrics" in state:
+            app_state.metrics.update(state["metrics"])
+        
+        # Broadcast para clientes WebSocket
+        await broadcast_to_clients({"type": "state_update", "data": state})
+        
+        return {"success": True, "message": "State updated"}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
+@app.get("/api/bot/state")
+async def get_bot_state():
+    """
+    Retorna estado atual do bot lido do arquivo compartilhado.
+    """
+    try:
+        import json
+        state_file = settings.DATA_DIR / "bot_state.json"
+        if state_file.exists():
+            with open(state_file, "r") as f:
+                return json.load(f)
+        return {"system_status": "unknown", "last_update": None}
+    except Exception as e:
+        return {"error": str(e)}
+
+
+# ==================== ROUTES: BOT CONTROL ====================
+
+import subprocess
+import psutil
+
+# Variável global para armazenar o processo do bot
+_bot_process: Optional[subprocess.Popen] = None
+
+@app.post("/api/bot/start")
+async def start_bot(user: dict = Depends(get_current_user)):
+    """Inicia o bot principal."""
+    global _bot_process
+    
+    try:
+        # Verifica se já está rodando
+        if _bot_process and _bot_process.poll() is None:
+            return {"success": False, "message": "Bot já está em execução"}
+        
+        # Também verifica por processo existente
+        for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
+            try:
+                cmdline = proc.info.get('cmdline', [])
+                if cmdline and 'main.py' in ' '.join(cmdline) and 'brain' in ' '.join(cmdline):
+                    return {"success": False, "message": "Bot já está em execução (PID: {})".format(proc.pid)}
+            except (psutil.NoSuchProcess, psutil.AccessDenied):
+                continue
+        
+        # Inicia o bot
+        python_path = str(BRAIN_PATH.parent / "env" / "Scripts" / "python.exe")
+        main_path = str(BRAIN_PATH / "main.py")
+        
+        _bot_process = subprocess.Popen(
+            [python_path, main_path],
+            cwd=str(BRAIN_PATH),
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            creationflags=subprocess.CREATE_NEW_PROCESS_GROUP if os.name == 'nt' else 0
+        )
+        
+        # Aguarda um pouco para verificar se iniciou
+        import asyncio
+        await asyncio.sleep(2)
+        
+        if _bot_process.poll() is None:
+            return {"success": True, "message": "Bot iniciado com sucesso", "pid": _bot_process.pid}
+        else:
+            stderr = _bot_process.stderr.read().decode() if _bot_process.stderr else ""
+            return {"success": False, "message": f"Falha ao iniciar o bot: {stderr}"}
+            
+    except Exception as e:
+        return {"success": False, "message": str(e)}
+
+
+@app.post("/api/bot/stop")
+async def stop_bot(user: dict = Depends(get_current_user)):
+    """Para o bot principal."""
+    global _bot_process
+    
+    try:
+        stopped = False
+        
+        # Tenta parar o processo armazenado
+        if _bot_process and _bot_process.poll() is None:
+            if os.name == 'nt':
+                _bot_process.terminate()
+            else:
+                _bot_process.send_signal(signal.SIGTERM)
+            _bot_process.wait(timeout=10)
+            stopped = True
+        
+        # Também procura e para processos do bot
+        for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
+            try:
+                cmdline = proc.info.get('cmdline', [])
+                if cmdline and 'main.py' in ' '.join(cmdline) and 'brain' in ' '.join(cmdline):
+                    proc.terminate()
+                    proc.wait(timeout=10)
+                    stopped = True
+            except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.TimeoutExpired):
+                continue
+        
+        _bot_process = None
+        
+        if stopped:
+            return {"success": True, "message": "Bot parado com sucesso"}
+        else:
+            return {"success": True, "message": "Nenhum bot em execução"}
+            
+    except Exception as e:
+        return {"success": False, "message": str(e)}
+
+
+@app.get("/api/bot/status")
+async def get_bot_status(user: dict = Depends(get_current_user)):
+    """Retorna status do bot principal."""
+    global _bot_process
+    
+    try:
+        # Verifica processo armazenado
+        if _bot_process and _bot_process.poll() is None:
+            return {
+                "running": True,
+                "pid": _bot_process.pid,
+                "source": "managed"
+            }
+        
+        # Procura processo existente
+        for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
+            try:
+                cmdline = proc.info.get('cmdline', [])
+                if cmdline and 'main.py' in ' '.join(cmdline) and 'brain' in ' '.join(cmdline):
+                    return {
+                        "running": True,
+                        "pid": proc.pid,
+                        "source": "external"
+                    }
+            except (psutil.NoSuchProcess, psutil.AccessDenied):
+                continue
+        
+        # Verifica pelo arquivo de estado
+        import json
+        state_file = settings.DATA_DIR / "bot_state.json"
+        if state_file.exists():
+            with open(state_file, "r") as f:
+                state = json.load(f)
+                system_status = state.get("system_status", "offline")
+                last_update = state.get("last_update")
+                
+                # Verifica se o último update foi recente (menos de 30 segundos)
+                if last_update:
+                    from datetime import datetime
+                    try:
+                        last_dt = datetime.fromisoformat(last_update)
+                        if (datetime.now() - last_dt).total_seconds() < 30:
+                            return {
+                                "running": system_status == "running",
+                                "status": system_status,
+                                "last_update": last_update,
+                                "source": "state_file"
+                            }
+                    except:
+                        pass
+        
+        return {"running": False, "status": "offline"}
+        
+    except Exception as e:
+        return {"running": False, "error": str(e)}
+
+
 # ==================== ROUTES: DASHBOARD ====================
 
 @app.get("/api/dashboard/overview")
@@ -929,27 +1248,52 @@ async def get_overview(user: dict = Depends(get_current_user)):
     """Visão geral do dashboard."""
     stats = app_state.get_trade_stats()
     
+    # Tenta ler estado do bot do arquivo compartilhado
+    bot_state = {}
+    try:
+        import json
+        state_file = settings.DATA_DIR / "bot_state.json"
+        if state_file.exists():
+            with open(state_file, "r") as f:
+                bot_state = json.load(f)
+    except Exception:
+        pass
+    
+    # Usa dados do bot_state se disponível, senão usa app_state
+    mt5_connected = bot_state.get("mt5_connected", app_state.mt5_connected)
+    account_data = bot_state.get("account", {}) or app_state.mt5_account or {}
+    
     return {
         "account": {
-            "balance": app_state.metrics.get("balance", 10000),
-            "equity": app_state.metrics.get("equity", 10000),
-            "margin": app_state.metrics.get("margin", 0),
-            "free_margin": app_state.metrics.get("free_margin", 10000),
-            "profit": app_state.metrics.get("profit", 0),
+            "balance": account_data.get("balance", app_state.metrics.get("balance", 0)),
+            "equity": account_data.get("equity", app_state.metrics.get("equity", 0)),
+            "margin": account_data.get("margin", app_state.metrics.get("margin", 0)),
+            "free_margin": account_data.get("margin_free", app_state.metrics.get("free_margin", 0)),
+            "profit": account_data.get("profit", app_state.metrics.get("profit", 0)),
         },
         "metrics": {
             "total_trades": stats.get("total_trades", 0),
             "win_rate": stats.get("win_rate", 0),
             "profit_factor": stats.get("profit_factor", 0),
             "net_profit": stats.get("net_profit", 0),
-            "max_drawdown": app_state.metrics.get("max_drawdown", 0),
+            "max_drawdown": bot_state.get("metrics", {}).get("max_drawdown", app_state.metrics.get("max_drawdown", 0)),
         },
         "today": {
             "trades": app_state.metrics.get("daily_trades", 0),
-            "profit": app_state.metrics.get("daily_pnl", 0),
+            "profit": bot_state.get("metrics", {}).get("daily_pnl", app_state.metrics.get("daily_pnl", 0)),
         },
         "bots_active": sum(1 for b in app_state.bots.values() if b.get("status") == "running"),
         "bots_total": len(app_state.bots),
+        "bots_status": {
+            "total": len(app_state.bots) or len(bot_state.get("bots", [])),
+            "running": sum(1 for b in app_state.bots.values() if b.get("status") == "running") or len([b for b in bot_state.get("bots", []) if b.get("status") == "running"]),
+            "stopped": sum(1 for b in app_state.bots.values() if b.get("status") != "running"),
+        },
+        "strategies_status": {"total": 4, "enabled": 4},
+        "symbols_status": {"total": 4, "enabled": 4},
+        "mt5_connected": mt5_connected,
+        "system_status": bot_state.get("system_status", "unknown"),
+        "last_update": bot_state.get("last_update"),
     }
 
 
@@ -981,10 +1325,17 @@ async def get_bots(user: dict = Depends(get_current_user)):
             "symbol": bot.get("symbol", "UNKNOWN"),
             "status": bot.get("status", "stopped"),
             "strategies": bot.get("strategies", []),
+            "config": bot.get("config", {
+                "enabled": True,
+                "max_positions": 3,
+                "risk_per_trade": 1.0,
+                "max_daily_loss": 5.0,
+                "max_daily_trades": 10,
+            }),
             "profit_today": 0,
             "trades_today": 0,
         })
-    return bots
+    return {"bots": bots}
 
 
 @app.post("/api/bots/{bot_id}/control")
@@ -1037,7 +1388,7 @@ async def update_bot_config(bot_id: str, config: Dict, user: dict = Depends(get_
 @app.get("/api/strategies")
 async def get_strategies(user: dict = Depends(get_current_user)):
     """Lista todas as estratégias."""
-    return list(app_state.strategies.values())
+    return {"strategies": list(app_state.strategies.values())}
 
 
 @app.post("/api/strategies/{name}/toggle")
@@ -1060,7 +1411,7 @@ async def toggle_strategy(name: str, toggle: StrategyToggle, user: dict = Depend
 @app.get("/api/symbols")
 async def get_symbols(user: dict = Depends(get_current_user)):
     """Lista todos os símbolos."""
-    return list(app_state.symbols.values())
+    return {"symbols": list(app_state.symbols.values())}
 
 
 @app.post("/api/symbols/{symbol}/toggle")
@@ -1083,7 +1434,9 @@ async def toggle_symbol(symbol: str, toggle: SymbolToggle, user: dict = Depends(
 @app.get("/api/positions")
 async def get_positions(user: dict = Depends(get_current_user)):
     """Lista posições abertas."""
-    return app_state.positions
+    positions = app_state.positions if isinstance(app_state.positions, list) else []
+    total_profit = sum(p.get("profit", 0) for p in positions) if positions else 0
+    return {"positions": positions, "total_profit": total_profit}
 
 
 @app.delete("/api/positions/{ticket}")
@@ -1101,7 +1454,8 @@ async def close_position(ticket: int, user: dict = Depends(get_current_user)):
 @app.get("/api/orders")
 async def get_orders(user: dict = Depends(get_current_user)):
     """Lista ordens pendentes."""
-    return app_state.pending_orders
+    orders = app_state.pending_orders if isinstance(app_state.pending_orders, list) else []
+    return {"orders": orders}
 
 
 @app.delete("/api/orders/{ticket}")
@@ -1119,7 +1473,7 @@ async def cancel_order(ticket: int, user: dict = Depends(get_current_user)):
 @app.get("/api/trades")
 async def get_trades(
     page: int = Query(default=1, ge=1),
-    page_size: int = Query(default=20, ge=1, le=100),
+    per_page: int = Query(default=50, ge=1, le=100),
     symbol: Optional[str] = None,
     strategy: Optional[str] = None,
     start_date: Optional[str] = None,
@@ -1127,13 +1481,13 @@ async def get_trades(
     user: dict = Depends(get_current_user),
 ):
     """Lista histórico de trades."""
-    offset = (page - 1) * page_size
+    offset = (page - 1) * per_page
     
     start_dt = datetime.fromisoformat(start_date) if start_date else None
     end_dt = datetime.fromisoformat(end_date) if end_date else None
     
     trades = app_state.get_trades(
-        limit=page_size,
+        limit=per_page,
         offset=offset,
         symbol=symbol,
         strategy=strategy,
@@ -1148,12 +1502,16 @@ async def get_trades(
         end_date=end_dt,
     )
     
+    pages = (total + per_page - 1) // per_page if total > 0 else 1
+    
     return {
-        "trades": trades,
-        "total": total,
-        "page": page,
-        "page_size": page_size,
-        "total_pages": (total + page_size - 1) // page_size,
+        "trades": trades if trades else [],
+        "pagination": {
+            "page": page,
+            "per_page": per_page,
+            "total": total,
+            "pages": pages,
+        }
     }
 
 
@@ -1170,17 +1528,17 @@ async def get_performance(user: dict = Depends(get_current_user)):
     """Análise de performance por hora/dia."""
     import random
     
-    hourly = [
-        {"hour": h, "trades": random.randint(5, 20), "profit": random.uniform(-50, 150), "win_rate": random.uniform(50, 75)}
+    hourly_performance = [
+        {"hour": h, "trades": random.randint(5, 20), "pnl": random.uniform(-50, 150), "win_rate": random.uniform(50, 75)}
         for h in range(24)
     ]
     
-    weekday = [
-        {"day": day, "trades": random.randint(20, 40), "profit": random.uniform(50, 300), "win_rate": random.uniform(55, 72)}
-        for day in ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"]
+    weekday_performance = [
+        {"day": day, "trades": random.randint(20, 40), "pnl": random.uniform(50, 300), "win_rate": random.uniform(55, 72)}
+        for day in ["Mon", "Tue", "Wed", "Thu", "Fri"]
     ]
     
-    return {"hourly": hourly, "weekday": weekday}
+    return {"hourly_performance": hourly_performance, "weekday_performance": weekday_performance}
 
 
 @app.get("/api/analysis/attribution")
@@ -1188,17 +1546,32 @@ async def get_attribution(user: dict = Depends(get_current_user)):
     """Atribuição de performance."""
     import random
     
-    by_strategy = [
-        {"name": s["name"], "trades": random.randint(30, 60), "profit": random.uniform(200, 800), "contribution": random.uniform(15, 40), "win_rate": random.uniform(58, 72)}
-        for s in app_state.strategies.values()
-    ]
+    # Formato esperado pelo frontend: objeto onde cada chave mapeia para outro objeto com stats
+    by_strategy = {}
+    for s in app_state.strategies.values():
+        by_strategy[s["name"]] = {
+            "trades": random.randint(30, 60),
+            "pnl": random.uniform(200, 800),
+            "wins": random.randint(15, 40),
+            "win_rate": random.uniform(58, 72)
+        }
     
-    by_symbol = [
-        {"name": s["symbol"], "trades": random.randint(40, 80), "profit": random.uniform(300, 1000), "contribution": random.uniform(20, 45), "win_rate": random.uniform(55, 70)}
-        for s in app_state.symbols.values()
-    ]
+    by_symbol = {}
+    for s in app_state.symbols.values():
+        by_symbol[s["symbol"]] = {
+            "trades": random.randint(40, 80),
+            "pnl": random.uniform(300, 1000),
+            "wins": random.randint(20, 50),
+            "win_rate": random.uniform(55, 70)
+        }
     
-    return {"by_strategy": by_strategy, "by_symbol": by_symbol}
+    by_setup = {
+        "Breakout": {"trades": random.randint(20, 40), "pnl": random.uniform(100, 400), "wins": random.randint(10, 25), "win_rate": random.uniform(50, 65)},
+        "Reversal": {"trades": random.randint(15, 35), "pnl": random.uniform(150, 350), "wins": random.randint(8, 20), "win_rate": random.uniform(52, 68)},
+        "Trend": {"trades": random.randint(25, 50), "pnl": random.uniform(200, 500), "wins": random.randint(15, 30), "win_rate": random.uniform(55, 70)},
+    }
+    
+    return {"by_strategy": by_strategy, "by_symbol": by_symbol, "by_setup": by_setup}
 
 
 # ==================== ROUTES: SETTINGS ====================
@@ -1272,6 +1645,20 @@ async def health_check():
 
 # ==================== WEBSOCKET ====================
 
+async def broadcast_to_clients(data: dict):
+    """Envia dados para todos os clientes WebSocket conectados."""
+    disconnected = set()
+    for websocket in app_state.websocket_connections:
+        try:
+            await websocket.send_json(data)
+        except Exception:
+            disconnected.add(websocket)
+    
+    # Remove conexões desconectadas
+    for ws in disconnected:
+        app_state.websocket_connections.discard(ws)
+
+
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
     """WebSocket para atualizações em tempo real."""
@@ -1300,6 +1687,63 @@ async def websocket_endpoint(websocket: WebSocket):
         app_state.websocket_connections.discard(websocket)
     except Exception:
         app_state.websocket_connections.discard(websocket)
+
+
+@app.websocket("/ws/internal")
+async def websocket_internal_endpoint(websocket: WebSocket):
+    """WebSocket interno para receber dados do bot principal."""
+    await websocket.accept()
+    
+    try:
+        while True:
+            data = await websocket.receive_json()
+            msg_type = data.get("type")
+            
+            if msg_type == "ping":
+                await websocket.send_json({"type": "pong"})
+            
+            elif msg_type == "bot_connected":
+                # Bot conectou, atualiza estado
+                bot_data = data.get("data", {})
+                app_state.mt5_connected = bot_data.get("mt5_connected", False)
+                app_state.mt5_account = bot_data.get("account", {})
+                await broadcast_to_clients({"type": "bot_connected", "data": bot_data})
+            
+            elif msg_type == "system_status":
+                # Status do sistema
+                await broadcast_to_clients(data)
+            
+            elif msg_type == "mt5_status":
+                # Status MT5
+                mt5_data = data.get("data", {})
+                app_state.mt5_connected = mt5_data.get("connected", False)
+                app_state.mt5_account = mt5_data.get("account", {})
+                await broadcast_to_clients(data)
+            
+            elif msg_type == "bots_update":
+                # Atualização dos bots
+                await broadcast_to_clients(data)
+            
+            elif msg_type == "positions_update":
+                # Atualização de posições
+                positions = data.get("data", {}).get("positions", [])
+                app_state.positions = positions
+                await broadcast_to_clients(data)
+            
+            elif msg_type == "metrics_update":
+                # Atualização de métricas
+                metrics = data.get("data", {}).get("metrics", {})
+                app_state.metrics.update(metrics)
+                await broadcast_to_clients(data)
+            
+            elif msg_type in ("trade_opened", "trade_closed", "alert"):
+                # Eventos de trade e alertas
+                await broadcast_to_clients(data)
+    
+    except WebSocketDisconnect:
+        pass
+    except Exception as e:
+        print(f"WebSocket internal error: {e}")
 
 
 # ==================== MT5 ROUTES ====================

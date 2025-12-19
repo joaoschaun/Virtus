@@ -1,0 +1,113 @@
+[
+  {
+    "symbol": "XAUUSD",
+    "direction": "buy",
+    "entry_price": 2650.5,
+    "stop_loss": 2645.0,
+    "take_profit": 2665.0,
+    "confidence": 0.85,
+    "timeframe": "M15",
+    "strategy": "thanos_test",
+    "metadata": {},
+    "received_at": "2025-12-16T13:11:50.123435",
+    "bot_name": "Thanos Bot",
+    "signal_id": "thanos_bot_2024_1_20251216131150"
+  },
+  {
+    "symbol": "XAUUSD",
+    "direction": "buy",
+    "entry_price": 2655.5,
+    "stop_loss": 2650.0,
+    "take_profit": 2670.0,
+    "confidence": 0.88,
+    "timeframe": "M15",
+    "strategy": "thanos_scalping",
+    "metadata": {
+      "test": true
+    },
+    "received_at": "2025-12-16T16:39:58.622586",
+    "bot_name": "Thanos Bot",
+    "signal_id": "thanos_bot_2024_2_20251216163958"
+  },
+  {
+    "symbol": "XAUUSD",
+    "direction": "buy",
+    "entry_price": 2650.0,
+    "stop_loss": 2645.0,
+    "take_profit": 2665.0,
+    "confidence": 0.85,
+    "timeframe": "M15",
+    "strategy": "thanos_test",
+    "metadata": {},
+    "received_at": "2025-12-16T17:33:25.322347",
+    "bot_name": "Thanos Bot",
+    "signal_id": "thanos_bot_2024_3_20251216173325"
+  },
+  {
+    "symbol": "XAUUSD",
+    "direction": "buy",
+    "entry_price": 4322.6,
+    "stop_loss": null,
+    "take_profit": null,
+    "confidence": 0.0,
+    "timeframe": "M5",
+    "strategy": "thanos_main",
+    "metadata": {
+      "rsi": 66.06,
+      "reversal_score": 0,
+      "signals_count": 0,
+      "signals": [],
+      "breakeven": 4322.7,
+      "pips_to_be": 0.999999999994543
+    },
+    "received_at": "2025-12-16T17:35:16.322707",
+    "bot_name": "Thanos Bot",
+    "signal_id": "thanos_bot_2024_4_20251216173516"
+  },
+  {
+    "symbol": "XAUUSD",
+    "direction": "buy",
+    "entry_price": 4323.9,
+    "stop_loss": null,
+    "take_profit": null,
+    "confidence": 0.2,
+    "timeframe": "M5",
+    "strategy": "thanos_main",
+    "metadata": {
+      "rsi": 70.64,
+      "reversal_score": 2,
+      "signals_count": 1,
+      "signals": [
+        "CANDLE_DOJI"
+      ],
+      "daily_profit": 70.6400000000001,
+      "total_profit": 70.6400000000001
+    },
+    "received_at": "2025-12-16T17:42:36.059240",
+    "bot_name": "Thanos Bot",
+    "signal_id": "thanos_bot_2024_5_20251216174236"
+  },
+  {
+    "symbol": "XAUUSD",
+    "direction": "buy",
+    "entry_price": 4321.57,
+    "stop_loss": null,
+    "take_profit": null,
+    "confidence": 0.2,
+    "timeframe": "M5",
+    "strategy": "thanos_main",
+    "metadata": {
+      "rsi": 69.73,
+      "reversal_score": 2,
+      "signals_count": 1,
+      "signals": [
+        "POSSIBLE_DIVERGENCE"
+      ],
+      "daily_profit": 76.54999999999995,
+      "total_profit": 76.54999999999995
+    },
+    "received_at": "2025-12-16T18:07:22.480052",
+    "bot_name": "Thanos Bot",
+    "signal_id": "thanos_bot_2024_6_20251216180722"
+  }
+]

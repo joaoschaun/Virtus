@@ -10,7 +10,6 @@ import yaml
 from pathlib import Path
 from typing import Dict, Any, Optional, List
 from dataclasses import dataclass, field
-from functools import lru_cache
 
 from .types import RiskConfig  # Usar RiskConfig de types.py
 
@@ -54,6 +53,7 @@ class APIKeysConfig:
     finazon: str = ""
     twelvedata: str = ""
     financialmodelingprep: str = ""
+    eodhd: str = ""
     
     @property
     def fmp(self) -> str:
@@ -125,11 +125,11 @@ class Config:
             
         self._initialized = True
         
-        # Determinar caminho do config
+        # Determinar caminho do config - SEMPRE usar caminho absoluto
         if config_path:
-            self.config_path = Path(config_path)
+            self.config_path = Path(config_path).resolve()
         else:
-            self.config_path = Path(__file__).parent.parent.parent / "config"
+            self.config_path = Path(__file__).resolve().parent.parent.parent / "config"
         
         # Carregar configurações
         self._raw_config: Dict[str, Any] = {}
@@ -152,6 +152,10 @@ class Config:
             with open(brain_config_path, 'r', encoding='utf-8') as f:
                 self._brain_config = yaml.safe_load(f)
         
+        # Obtém configuração de enabled do config.yaml principal
+        # Isso permite sobrescrever o enabled dos YAMLs individuais
+        main_bots_config = self._raw_config.get('bots', {})
+        
         # Configs dos bots
         bots_path = self.config_path / "bots"
         if bots_path.exists():
@@ -160,12 +164,32 @@ class Config:
                     bot_data = yaml.safe_load(f)
                     if bot_data and 'bot' in bot_data:
                         bot_info = bot_data['bot']
+                        bot_id = bot_info.get('id', bot_file.stem)
+                        
+                        # Verifica se há override de enabled no config.yaml principal
+                        # Procura por bot_id + "_bot" (ex: gold_bot, euro_bot)
+                        main_bot_key = f"{bot_id}_bot"
+                        main_bot_override = main_bots_config.get(main_bot_key, {})
+                        
+                        # Usa enabled do config.yaml principal se existir,
+                        # senão usa o do arquivo individual do bot
+                        enabled = main_bot_override.get(
+                            'enabled', 
+                            bot_info.get('enabled', False)
+                        )
+                        
+                        # Prioridade também pode ser sobrescrita
+                        priority = main_bot_override.get(
+                            'priority',
+                            bot_info.get('priority', 'normal')
+                        )
+                        
                         bot_config = BotConfig(
-                            id=bot_info.get('id', bot_file.stem),
+                            id=bot_id,
                             name=bot_info.get('name', ''),
                             symbol=bot_info.get('symbol', ''),
-                            enabled=bot_info.get('enabled', False),
-                            priority=bot_info.get('priority', 'normal'),
+                            enabled=enabled,
+                            priority=priority,
                             config_file=str(bot_file),
                             analysis_interval=bot_info.get('analysis_interval', 5.0),
                             strategies=bot_data.get('strategies', {}),
@@ -183,9 +207,12 @@ class Config:
         # Reset singleton para permitir novo caminho
         cls._instance = None
         # from_yaml recebe o path do arquivo, não do diretório
-        # Extrair o diretório pai do arquivo config
-        config_dir = str(Path(config_path).parent)
-        return cls(config_dir)
+        # Extrair o diretório pai do arquivo config e resolver para path absoluto
+        config_dir = str(Path(config_path).resolve().parent)
+        instance = cls(config_dir)
+        # Força reload para garantir que os bots sejam carregados
+        instance.reload()
+        return instance
     
     def reload(self) -> None:
         """Recarrega todas as configurações"""
@@ -323,9 +350,20 @@ class Config:
 
 
 # Função helper para obter config global
-@lru_cache(maxsize=1)
 def get_config(config_path: Optional[str] = None) -> Config:
     """Retorna instância singleton da configuração"""
+    # Se já existe uma instância, retorna ela
+    if Config._instance is not None:
+        return Config._instance
+    
+    # Se não há path especificado, usa o path padrão absoluto baseado no diretório do módulo
+    if config_path is None:
+        # O diretório config está no mesmo nível que src (onde este arquivo está)
+        # Este arquivo está em: brain/src/core/config.py
+        # Config está em: brain/config/
+        module_dir = Path(__file__).parent.parent.parent  # brain/
+        config_path = str(module_dir / "config")
+    
     return Config(config_path)
 
 

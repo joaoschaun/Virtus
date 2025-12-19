@@ -117,6 +117,89 @@ class TrendStrategy:
         self.logger = VirtusLogger.get_logger("trend_strategy")
         self.name = "Trend Strategy"
     
+    async def find_setups(
+        self,
+        market_data: Dict[str, Any],
+        analysis: Dict[str, Any]
+    ) -> List[Dict[str, Any]]:
+        """
+        Interface para TradingEngine - encontra setups de trend.
+        
+        Args:
+            market_data: Dados de mercado
+            analysis: Análise técnica completa
+            
+        Returns:
+            Lista de setups encontrados
+        """
+        setups = []
+        
+        try:
+            # Extrai dados
+            symbol = market_data.get('symbol', '')
+            tick = analysis.get('tick', {})
+            current_price = tick.get('bid') or tick.get('last') or analysis.get('price', 0)
+            
+            if not current_price:
+                return setups
+            
+            # Indicadores
+            indicators = analysis.get('indicators', {})
+            volatility = analysis.get('volatility', {})
+            atr = volatility.get('atr', 0) or indicators.get('atr', 0)
+            
+            # Trend info
+            trend = analysis.get('trend', {})
+            trend_direction = trend.get('direction', 'neutral')
+            trend_strength = trend.get('strength', 0)
+            
+            # EMAs
+            ema9 = indicators.get('ema_9', 0)
+            ema21 = indicators.get('ema_21', 0)
+            ema50 = indicators.get('ema_50', 0)
+            
+            # ADX
+            adx = indicators.get('adx', 0)
+            
+            # Determina se há tendência clara
+            if adx and adx >= 25:
+                # Trend following simples baseado em EMAs
+                if ema9 and ema21 and ema50:
+                    if ema9 > ema21 > ema50 and trend_direction == 'bullish':
+                        # Tendência de alta
+                        sl_distance = atr * 2 if atr else current_price * 0.005
+                        tp_distance = atr * 4 if atr else current_price * 0.010
+                        
+                        setups.append({
+                            'name': 'trend_ema_alignment_buy',
+                            'direction': 'buy',
+                            'entry': current_price,
+                            'sl': current_price - sl_distance,
+                            'tp': current_price + tp_distance,
+                            'score': min(0.7 + (adx - 25) / 100, 0.9),
+                            'risk_reward': tp_distance / sl_distance if sl_distance else 2.0,
+                        })
+                        
+                    elif ema9 < ema21 < ema50 and trend_direction == 'bearish':
+                        # Tendência de baixa
+                        sl_distance = atr * 2 if atr else current_price * 0.005
+                        tp_distance = atr * 4 if atr else current_price * 0.010
+                        
+                        setups.append({
+                            'name': 'trend_ema_alignment_sell',
+                            'direction': 'sell',
+                            'entry': current_price,
+                            'sl': current_price + sl_distance,
+                            'tp': current_price - tp_distance,
+                            'score': min(0.7 + (adx - 25) / 100, 0.9),
+                            'risk_reward': tp_distance / sl_distance if sl_distance else 2.0,
+                        })
+                        
+        except Exception as e:
+            self.logger.error(f"Erro em find_setups: {e}")
+        
+        return setups
+    
     async def evaluate(
         self,
         symbol: str,

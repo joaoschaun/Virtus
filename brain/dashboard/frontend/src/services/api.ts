@@ -181,4 +181,16 @@ export const mt5API = {
   getSymbolInfo: (symbol: string) => api.get(`/api/mt5/symbol/${symbol}`),
 }
 
+// External Bots API (Thanos, etc)
+export const externalBotsAPI = {
+  // Listar todos os bots externos
+  list: () => api.get('/api/external/admin/bots'),
+  
+  // Detalhes de um bot específico
+  getDetails: (botId: string) => api.get(`/api/external/admin/bot/${botId}`),
+  
+  // Info da API
+  getInfo: () => api.get('/api/external/info'),
+}
+
 export default api

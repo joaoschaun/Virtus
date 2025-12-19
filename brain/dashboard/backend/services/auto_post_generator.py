@@ -98,6 +98,48 @@ class AutoPostGenerator:
         with open(processed_file, 'w', encoding='utf-8') as f:
             json.dump(list(self.processed_news_ids), f)
     
+    async def generate_single_news_post(self, news_data: Dict) -> Optional[Dict]:
+        """
+        Gera post a partir de uma notícia selecionada manualmente.
+        
+        Args:
+            news_data: Dict com title, summary, sentiment, category, tickers, source
+            
+        Returns:
+            Post gerado ou None
+        """
+        try:
+            # Cria objeto simples para compatibilidade com _generate_news_post
+            class NewsObject:
+                def __init__(self, data):
+                    self.title = data.get('title', '')
+                    self.summary = data.get('summary', '')
+                    self.content = data.get('summary', '')
+                    self.sentiment = data.get('sentiment', 'neutral')
+                    self.source = data.get('source', 'Virtus')
+                    self.tickers = data.get('tickers', [])
+                    
+                    # Categoria
+                    from services.news_service import NewsCategory
+                    cat_str = data.get('category', 'stocks_br')
+                    try:
+                        self.category = NewsCategory(cat_str)
+                    except:
+                        self.category = NewsCategory.ALL
+            
+            news_obj = NewsObject(news_data)
+            
+            print(f"🖼️ Gerando post da notícia selecionada: {news_obj.title[:50]}...")
+            post = await self._generate_news_post(news_obj, use_ai=True)
+            
+            return post
+            
+        except Exception as e:
+            import traceback
+            print(f"❌ Erro ao gerar post de notícia selecionada: {e}")
+            traceback.print_exc()
+            return None
+    
     async def fetch_and_generate(self, limit: int = 5) -> List[Dict]:
         """
         Busca notícias e gera posts automaticamente.
@@ -204,27 +246,36 @@ class AutoPostGenerator:
                 )
                 caption_text = content.caption
             
-            # Gera imagem
-            config = ImageConfig(
-                title=news.title[:80],  # Limita tamanho
-                body=summary_text[:200] if summary_text else news.title,
-                trend=sentiment,
+            # ==================== GERAÇÃO DE IMAGEM ====================
+            # Tenta usar TESS AI para imagem profissional
+            filename = await self._generate_news_image_tess(
+                news=news,
+                sentiment=sentiment,
+                symbols=related_symbols
             )
             
-            image = image_gen.generate_news_highlight(config)
-            
-            # Salva imagem com nome ASCII-safe
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            # Remove acentos e caracteres especiais
-            safe_title = unicodedata.normalize('NFKD', news.title[:30])
-            safe_title = safe_title.encode('ASCII', 'ignore').decode('ASCII')
-            safe_title = re.sub(r'[^a-zA-Z0-9\s]', '', safe_title)
-            safe_title = safe_title.strip().replace(" ", "_")[:20]
-            if not safe_title:
-                safe_title = "news"
-            filename = f"news_{safe_title}_{timestamp}.png"
-            image_path = IMAGES_DIR / filename
-            image_gen.save(image, image_path)
+            # Fallback para PIL se TESS falhar
+            if not filename:
+                config = ImageConfig(
+                    title=news.title[:80],  # Limita tamanho
+                    body=summary_text[:200] if summary_text else news.title,
+                    trend=sentiment,
+                )
+                
+                image = image_gen.generate_news_highlight(config)
+                
+                # Salva imagem com nome ASCII-safe
+                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                # Remove acentos e caracteres especiais
+                safe_title = unicodedata.normalize('NFKD', news.title[:30])
+                safe_title = safe_title.encode('ASCII', 'ignore').decode('ASCII')
+                safe_title = re.sub(r'[^a-zA-Z0-9\s]', '', safe_title)
+                safe_title = safe_title.strip().replace(" ", "_")[:20]
+                if not safe_title:
+                    safe_title = "news"
+                filename = f"news_{safe_title}_{timestamp}.png"
+                image_path = IMAGES_DIR / filename
+                image_gen.save(image, image_path)
             
             # Cria registro do post
             post = {
@@ -330,6 +381,84 @@ class AutoPostGenerator:
         except Exception as e:
             logger.error(f"Erro ao gerar caption com TESS: {e}")
             raise
+    
+    async def _generate_news_image_tess(
+        self,
+        news,
+        sentiment: str,
+        symbols: List[str]
+    ) -> Optional[str]:
+        """
+        Gera imagem de notícia usando TESS AI com overlay Virtus.
+        
+        Args:
+            news: Objeto de notícia
+            sentiment: bullish/bearish/neutral
+            symbols: Símbolos relacionados
+            
+        Returns:
+            Nome do arquivo salvo ou None se falhar
+        """
+        if not TESS_ENABLED:
+            return None
+        
+        try:
+            from src.integrations.tess.image_generator import (
+                TessImageGenerator, NewsData
+            )
+            
+            # Mapear sentimento
+            sentiment_map = {
+                "bullish": "positive",
+                "bearish": "negative",
+                "neutral": "neutral"
+            }
+            
+            # Determinar impacto baseado no conteúdo
+            impact = "medium"
+            high_impact_words = ["breaking", "urgente", "histórico", "recorde", "crise", "colapso", "dispara"]
+            title_lower = news.title.lower()
+            for word in high_impact_words:
+                if word in title_lower:
+                    impact = "high"
+                    break
+            
+            # Preparar dados da notícia
+            news_data = NewsData(
+                title=news.title,
+                summary=news.summary if news.summary else news.title,
+                sentiment=sentiment_map.get(sentiment, "neutral"),
+                impact=impact,
+                symbols=symbols,
+                source=news.source if hasattr(news, 'source') else ""
+            )
+            
+            # Gerar nome do arquivo
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            safe_title = unicodedata.normalize('NFKD', news.title[:20])
+            safe_title = safe_title.encode('ASCII', 'ignore').decode('ASCII')
+            safe_title = re.sub(r'[^a-zA-Z0-9\s]', '', safe_title)
+            safe_title = safe_title.strip().replace(" ", "_")[:15]
+            if not safe_title:
+                safe_title = "news"
+            filename = f"news_tess_{safe_title}_{timestamp}.png"
+            save_path = IMAGES_DIR / filename
+            
+            # Gerar imagem com overlay
+            async with TessImageGenerator() as generator:
+                await generator.generate_news_with_overlay(
+                    news=news_data,
+                    save_path=save_path
+                )
+            
+            print(f"🎨 Imagem TESS gerada: {filename}")
+            return filename
+            
+        except Exception as e:
+            logger.warning(f"TESS news image generation failed: {e}")
+            import traceback
+            traceback.print_exc()
+            return None
 
     async def generate_market_summary(self) -> Optional[Dict]:
         """Gera resumo diário do mercado."""

@@ -39,6 +39,7 @@ from src.telegram import TelegramService
 from src.advisor import MarketAdvisor
 from src.orchestrator import BotOrchestrator
 from src.risk import RiskManager
+from src.integrations.dashboard_bridge import DashboardBridge, get_dashboard_bridge
 
 
 class VirtusSystem:
@@ -48,7 +49,11 @@ class VirtusSystem:
     Coordena inicialização e execução de todos os componentes.
     """
     
-    def __init__(self, config_path: str = "config/config.yaml"):
+    def __init__(self, config_path: str = None):
+        # Usa path absoluto baseado no diretório do script se não fornecido
+        if config_path is None:
+            script_dir = Path(__file__).resolve().parent  # resolve() garante caminho absoluto
+            config_path = str(script_dir / "config" / "config.yaml")
         self.config_path = config_path
         self.logger = VirtusLogger.get_logger("virtus")
         
@@ -60,10 +65,12 @@ class VirtusSystem:
         self.advisor: Optional[MarketAdvisor] = None
         self.orchestrator: Optional[BotOrchestrator] = None
         self.risk_manager: Optional[RiskManager] = None
+        self.dashboard_bridge: Optional[DashboardBridge] = None
         
         # Estado
         self._running = False
         self._shutdown_event = asyncio.Event()
+        self._dashboard_task: Optional[asyncio.Task] = None
     
     async def initialize(self) -> bool:
         """Inicializa todos os componentes do sistema."""
@@ -136,6 +143,16 @@ class VirtusSystem:
                 raise VirtusError("Falha ao inicializar Orchestrator")
             self.logger.success("✅ Orchestrator inicializado")
             
+            # 8. Inicializa Dashboard Bridge
+            self.logger.info("🔗 Inicializando Dashboard Bridge...")
+            try:
+                self.dashboard_bridge = await get_dashboard_bridge()
+                await self.dashboard_bridge.update_system_status("initializing")
+                await self.dashboard_bridge.update_mt5_status(True, account_info)
+                self.logger.success("✅ Dashboard Bridge inicializado")
+            except Exception as e:
+                self.logger.warning(f"⚠️ Dashboard Bridge não disponível: {e}")
+            
             self.logger.info("=" * 60)
             self.logger.success("✅ Sistema VIRTUS inicializado com sucesso!")
             self.logger.info("=" * 60)
@@ -160,6 +177,12 @@ class VirtusSystem:
         await self.orchestrator.start()
         
         self.logger.info("▶️ Sistema VIRTUS em execução")
+        
+        # Atualiza Dashboard
+        if self.dashboard_bridge:
+            await self.dashboard_bridge.update_system_status("running")
+            # Inicia task de atualização periódica do dashboard
+            self._dashboard_task = asyncio.create_task(self._dashboard_update_loop())
         
         # Notifica via Telegram (se disponível)
         if self.telegram and self.telegram._initialized:
@@ -187,6 +210,15 @@ class VirtusSystem:
         
         self.logger.info("🛑 Parando sistema VIRTUS...")
         self._running = False
+        
+        # Para task de dashboard
+        if self._dashboard_task:
+            self._dashboard_task.cancel()
+        
+        # Atualiza Dashboard
+        if self.dashboard_bridge:
+            await self.dashboard_bridge.update_system_status("offline")
+            await self.dashboard_bridge.stop()
         
         # Para Advisor
         if self.advisor:
@@ -239,6 +271,64 @@ class VirtusSystem:
         
         # Aguarda shutdown
         await self._shutdown_event.wait()
+    
+    async def _dashboard_update_loop(self):
+        """Loop de atualização periódica do dashboard."""
+        while self._running:
+            try:
+                if self.dashboard_bridge:
+                    # Atualiza status dos bots
+                    if self.orchestrator:
+                        bots_data = []
+                        for bot in self.orchestrator.registry.get_all():
+                            bots_data.append({
+                                "symbol": bot.symbol,
+                                "status": "running" if bot.is_running else "stopped",
+                                "trades_today": getattr(bot, 'trades_today', 0),
+                                "profit_today": getattr(bot, 'profit_today', 0),
+                            })
+                        await self.dashboard_bridge.update_bots(bots_data)
+                    
+                    # Atualiza posições via MT5 diretamente
+                    try:
+                        import MetaTrader5 as mt5
+                        positions_raw = mt5.positions_get()
+                        positions_data = []
+                        if positions_raw:
+                            for p in positions_raw:
+                                positions_data.append({
+                                    "ticket": p.ticket,
+                                    "symbol": p.symbol,
+                                    "type": "BUY" if p.type == 0 else "SELL",
+                                    "volume": p.volume,
+                                    "profit": p.profit,
+                                    "open_price": p.price_open,
+                                    "current_price": p.price_current,
+                                })
+                        await self.dashboard_bridge.update_positions(positions_data)
+                    except Exception:
+                        pass
+                    
+                    # Atualiza métricas
+                    if self.risk_manager:
+                        risk_status = self.risk_manager.get_status()
+                        metrics = {
+                            "daily_pnl": risk_status.get('metrics', {}).get('daily_loss', 0),
+                            "max_drawdown": risk_status.get('metrics', {}).get('max_drawdown', 0),
+                            "exposure": risk_status.get('metrics', {}).get('total_exposure', 0),
+                            "balance": risk_status.get('balance', 0),
+                            "equity": risk_status.get('equity', 0),
+                        }
+                        await self.dashboard_bridge.update_metrics(metrics)
+                    
+                    # Atualiza conta MT5
+                    if self.mt5 and self.mt5.account_info:
+                        await self.dashboard_bridge.update_mt5_status(True, self.mt5.account_info)
+                
+            except Exception as e:
+                self.logger.warning(f"⚠️ Erro ao atualizar dashboard: {e}")
+            
+            await asyncio.sleep(5)  # Atualiza a cada 5 segundos
     
     def get_status(self) -> dict:
         """Retorna status do sistema."""
@@ -314,9 +404,14 @@ if __name__ == "__main__":
         default="full",
         help="Modo de execução"
     )
+    
+    # Calcula path padrão baseado no diretório do script
+    script_dir = Path(__file__).resolve().parent
+    default_config = str(script_dir / "config" / "config.yaml")
+    
     parser.add_argument(
         "--config",
-        default="config/config.yaml",
+        default=default_config,
         help="Caminho do arquivo de configuração"
     )
     

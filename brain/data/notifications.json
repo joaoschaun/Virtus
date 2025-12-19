@@ -1,5 +1,55 @@
 [
   {
+    "id": "6e7a01b2-d3d2-407d-843d-54aae8dac2d8",
+    "type": "system",
+    "priority": "low",
+    "title": "Sistema Iniciado",
+    "message": "Dashboard VIRTUS iniciado com sucesso. Todos os servi\u00e7os est\u00e3o operacionais.",
+    "timestamp": "2025-12-17T01:02:28.712093",
+    "read": false,
+    "data": null
+  },
+  {
+    "id": "bdf99f8a-e8a9-4a03-bdd3-a99e655554c3",
+    "type": "system",
+    "priority": "low",
+    "title": "Sistema Iniciado",
+    "message": "Dashboard VIRTUS iniciado com sucesso. Todos os servi\u00e7os est\u00e3o operacionais.",
+    "timestamp": "2025-12-16T16:32:21.890491",
+    "read": true,
+    "data": null
+  },
+  {
+    "id": "f48faa6e-5ff6-4245-9159-7a00e24367b8",
+    "type": "system",
+    "priority": "low",
+    "title": "Sistema Iniciado",
+    "message": "Dashboard VIRTUS iniciado com sucesso. Todos os servi\u00e7os est\u00e3o operacionais.",
+    "timestamp": "2025-12-15T20:43:26.921063",
+    "read": true,
+    "data": null
+  },
+  {
+    "id": "810fe9cc-53a8-467d-9808-a6d4434564cd",
+    "type": "system",
+    "priority": "low",
+    "title": "Sistema Iniciado",
+    "message": "Dashboard VIRTUS iniciado com sucesso. Todos os servi\u00e7os est\u00e3o operacionais.",
+    "timestamp": "2025-12-15T19:51:35.233665",
+    "read": true,
+    "data": null
+  },
+  {
+    "id": "4d8b2f53-118b-4a9f-bd45-3563c12627fc",
+    "type": "system",
+    "priority": "low",
+    "title": "Sistema Iniciado",
+    "message": "Dashboard VIRTUS iniciado com sucesso. Todos os servi\u00e7os est\u00e3o operacionais.",
+    "timestamp": "2025-12-15T19:26:52.835248",
+    "read": true,
+    "data": null
+  },
+  {
     "id": "1f833144-0c71-4057-9801-47e7f311ff59",
     "type": "system",
     "priority": "medium",

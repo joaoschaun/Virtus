@@ -1,0 +1,77 @@
+{
+  "system_status": "running",
+  "mt5_connected": true,
+  "account": {
+    "login": 61444598,
+    "trade_mode": 0,
+    "leverage": 200,
+    "limit_orders": 500,
+    "margin_so_mode": 0,
+    "trade_allowed": true,
+    "trade_expert": true,
+    "margin_mode": 2,
+    "currency_digits": 2,
+    "fifo_close": false,
+    "balance": 5080.82,
+    "credit": 0.0,
+    "profit": 0.0,
+    "equity": 5080.82,
+    "margin": 0.0,
+    "margin_free": 5080.82,
+    "margin_level": 0.0,
+    "margin_so_call": 90.0,
+    "margin_so_so": 50.0,
+    "margin_initial": 0.0,
+    "margin_maintenance": 0.0,
+    "assets": 0.0,
+    "liabilities": 0.0,
+    "commission_blocked": 0.0,
+    "name": "Paloma de Campos",
+    "server": "Pepperstone-Demo",
+    "currency": "USD",
+    "company": "Pepperstone Group Limited"
+  },
+  "bots": [
+    {
+      "symbol": "EURUSD",
+      "status": "running",
+      "trades_today": 0,
+      "profit_today": 0
+    },
+    {
+      "symbol": "XAUUSD",
+      "status": "running",
+      "trades_today": 0,
+      "profit_today": 0
+    }
+  ],
+  "positions": [
+    {
+      "ticket": 216380448,
+      "symbol": "XAUUSD",
+      "type": "BUY",
+      "volume": 0.01,
+      "profit": -13.73,
+      "open_price": 4330.64,
+      "current_price": 4316.91
+    },
+    {
+      "ticket": 216385865,
+      "symbol": "EURUSD",
+      "type": "BUY",
+      "volume": 0.01,
+      "profit": -0.3,
+      "open_price": 1.1727,
+      "current_price": 1.1724
+    }
+  ],
+  "signals": [],
+  "metrics": {
+    "daily_pnl": 0.0,
+    "max_drawdown": 0.0,
+    "exposure": 0.0,
+    "balance": 5080.82,
+    "equity": 5080.82
+  },
+  "last_update": "2025-12-18T17:28:08.161989"
+}

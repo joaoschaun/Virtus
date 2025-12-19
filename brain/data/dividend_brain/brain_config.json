@@ -1,0 +1,20 @@
+{
+  "strategy": "hybrid",
+  "risk_tolerance": "medium",
+  "min_dividend_yield": 0,
+  "max_pe_ratio": 30,
+  "min_liquidity": 1000000,
+  "buy_days_before_ex": 10,
+  "sell_days_after_ex": 1,
+  "max_position_percent": 20.0,
+  "sectors_preference": [
+    "Energia Elétrica",
+    "Bancos",
+    "Seguros"
+  ],
+  "sectors_avoid": [],
+  "auto_alerts": true,
+  "notification_channels": [
+    "dashboard"
+  ]
+}

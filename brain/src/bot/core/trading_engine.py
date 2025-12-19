@@ -197,11 +197,15 @@ class TradingEngine:
         mode: TradingMode = TradingMode.ADAPTIVE,
         execution_mode: ExecutionMode = ExecutionMode.NORMAL,
         risk_per_trade: float = 0.01,  # 1% por trade
+        enabled_strategies: Optional[List[str]] = None,  # Estratégias habilitadas do YAML
+        bot_config: Optional[Dict[str, Any]] = None,  # Configuração completa do bot YAML
     ):
         self.symbol = symbol
         self.mode = mode
         self.execution_mode = execution_mode
         self.risk_per_trade = risk_per_trade
+        self.enabled_strategies = enabled_strategies or []  # Lista de estratégias do YAML
+        self.bot_config = bot_config or {}  # Config completa do bot
         
         self.logger = VirtusLogger.get_logger(f"trading_engine.{symbol.lower()}")
         
@@ -228,13 +232,18 @@ class TradingEngine:
         # Decision history
         self._decisions: deque = deque(maxlen=1000)
         
-        # Configuração por modo
+        # Configuração por modo - usa estratégias do YAML se fornecidas
         self._mode_config = self._get_mode_config(mode)
         
-        # Thresholds
-        self._min_confluence = 0.6
-        self._min_ml_confidence = 0.55
-        self._min_risk_reward = 1.5
+        # Sobrescreve estratégias do modo com as do YAML se fornecidas
+        if self.enabled_strategies:
+            self._mode_config['strategies'] = self.enabled_strategies
+            self.logger.info(f"📊 Usando estratégias do YAML: {self.enabled_strategies}")
+        
+        # Thresholds - AGRESSIVO para mais trades
+        self._min_confluence = 0.35  # Muito agressivo
+        self._min_ml_confidence = 0.45  # Aceita menor confiança ML
+        self._min_risk_reward = 1.0  # Aceita R:R 1:1
         
     def _get_mode_config(self, mode: TradingMode) -> Dict[str, Any]:
         """Obtém configuração por modo."""
@@ -242,8 +251,8 @@ class TradingEngine:
             TradingMode.SCALPING: {
                 'primary_timeframe': Timeframe.M1,
                 'confirmation_timeframe': Timeframe.M5,
-                'min_confluence': 0.5,
-                'min_risk_reward': 1.2,
+                'min_confluence': 0.30,  # AGRESSIVO
+                'min_risk_reward': 1.0,  # Aceita 1:1
                 'use_ml': True,
                 'trailing_type': TrailingType.ATR_BASED,
                 'strategies': ['scalping'],
@@ -251,8 +260,8 @@ class TradingEngine:
             TradingMode.TREND_FOLLOWING: {
                 'primary_timeframe': Timeframe.H1,
                 'confirmation_timeframe': Timeframe.H4,
-                'min_confluence': 0.65,
-                'min_risk_reward': 2.0,
+                'min_confluence': 0.50,  # Era 0.65
+                'min_risk_reward': 1.5,  # Era 2.0
                 'use_ml': True,
                 'trailing_type': TrailingType.SWING_BASED,
                 'strategies': ['trend'],
@@ -260,8 +269,8 @@ class TradingEngine:
             TradingMode.REVERSAL: {
                 'primary_timeframe': Timeframe.M15,
                 'confirmation_timeframe': Timeframe.H1,
-                'min_confluence': 0.7,
-                'min_risk_reward': 2.5,
+                'min_confluence': 0.55,  # Era 0.7
+                'min_risk_reward': 2.0,  # Era 2.5
                 'use_ml': True,
                 'trailing_type': TrailingType.CHANDELIER,
                 'strategies': ['reversal'],
@@ -269,8 +278,8 @@ class TradingEngine:
             TradingMode.EVENT_DRIVEN: {
                 'primary_timeframe': Timeframe.M5,
                 'confirmation_timeframe': Timeframe.M15,
-                'min_confluence': 0.6,
-                'min_risk_reward': 1.5,
+                'min_confluence': 0.45,  # Era 0.6
+                'min_risk_reward': 1.2,  # Era 1.5
                 'use_ml': False,
                 'trailing_type': TrailingType.STEP_TRAIL,
                 'strategies': ['event'],
@@ -278,8 +287,8 @@ class TradingEngine:
             TradingMode.ADAPTIVE: {
                 'primary_timeframe': Timeframe.M15,
                 'confirmation_timeframe': Timeframe.H1,
-                'min_confluence': 0.6,
-                'min_risk_reward': 1.5,
+                'min_confluence': 0.30,  # AGRESSIVO - aceita 30%
+                'min_risk_reward': 1.0,  # Aceita 1:1
                 'use_ml': True,
                 'trailing_type': TrailingType.ATR_BASED,
                 'strategies': ['scalping', 'trend', 'reversal', 'event'],
@@ -287,8 +296,8 @@ class TradingEngine:
             TradingMode.CONSERVATIVE: {
                 'primary_timeframe': Timeframe.H1,
                 'confirmation_timeframe': Timeframe.H4,
-                'min_confluence': 0.75,
-                'min_risk_reward': 3.0,
+                'min_confluence': 0.60,  # Era 0.75
+                'min_risk_reward': 2.0,  # Era 3.0
                 'use_ml': True,
                 'trailing_type': TrailingType.SWING_BASED,
                 'strategies': ['trend', 'reversal'],
@@ -343,24 +352,51 @@ class TradingEngine:
             return False
     
     async def _initialize_strategies(self) -> None:
-        """Inicializa estratégias configuradas."""
+        """Inicializa estratégias configuradas (do YAML ou modo)."""
         strategies = self._mode_config['strategies']
+        strategy_configs = self.bot_config.get('strategies', {})
+        
+        self.logger.info(f"📊 Inicializando estratégias: {strategies}")
         
         if 'scalping' in strategies:
-            self.scalping_strategy = ScalpingStrategy()  # Usa config padrão
-            self.logger.debug("Scalping Strategy ativada")
+            # Obtém configuração específica de scalping do YAML
+            scalping_config = strategy_configs.get('scalping', {})
+            self.scalping_strategy = ScalpingStrategy()
+            self.logger.info(f"  ✅ Scalping Strategy ativada (weight: {scalping_config.get('weight', 1.0)})")
             
-        if 'trend' in strategies:
-            self.trend_strategy = TrendStrategy()  # Usa config padrão
-            self.logger.debug("Trend Strategy ativada")
+        if 'trend' in strategies or 'trend_following' in strategies:
+            trend_config = strategy_configs.get('trend_following', {})
+            self.trend_strategy = TrendStrategy()
+            self.logger.info(f"  ✅ Trend Strategy ativada (weight: {trend_config.get('weight', 1.0)})")
             
         if 'reversal' in strategies:
-            self.reversal_strategy = ReversalStrategy()  # Usa config padrão
-            self.logger.debug("Reversal Strategy ativada")
+            reversal_config = strategy_configs.get('reversal', {})
+            self.reversal_strategy = ReversalStrategy()
+            self.logger.info(f"  ✅ Reversal Strategy ativada (weight: {reversal_config.get('weight', 1.0)})")
             
         if 'event' in strategies:
-            self.event_strategy = EventStrategy()  # Usa config padrão
-            self.logger.debug("Event Strategy ativada")
+            event_config = strategy_configs.get('event', {})
+            self.event_strategy = EventStrategy()
+            self.logger.info(f"  ✅ Event Strategy ativada (weight: {event_config.get('weight', 1.0)})")
+        
+        # Estratégias extras configuradas nos YAMLs dos bots
+        if 'range_trading' in strategies:
+            # Range trading usa a mesma lógica de reversal
+            if not self.reversal_strategy:
+                self.reversal_strategy = ReversalStrategy()
+                self.logger.info("  ✅ Range Trading (via Reversal Strategy) ativada")
+        
+        if 'breakout' in strategies:
+            # Breakout usa a mesma lógica de trend
+            if not self.trend_strategy:
+                self.trend_strategy = TrendStrategy()
+                self.logger.info("  ✅ Breakout (via Trend Strategy) ativada")
+        
+        active_count = sum([
+            1 for s in [self.scalping_strategy, self.trend_strategy, 
+                       self.reversal_strategy, self.event_strategy] if s
+        ])
+        self.logger.info(f"📊 Total de estratégias ativas: {active_count}")
     
     async def analyze_and_decide(
         self,
@@ -390,8 +426,22 @@ class TradingEngine:
             # 1. Análise completa do mercado
             analysis = await self._run_full_analysis(market_data)
             
-            if not analysis or analysis.get('score', 0) < 0.4:
-                return self._create_no_trade_decision("Análise insuficiente")
+            # Adiciona current_price à análise para as estratégias
+            analysis['price'] = current_price
+            analysis['tick'] = {'bid': current_price, 'ask': current_price * 1.0001}
+            
+            # Debug: verifica tipo da análise
+            self.logger.info(f"Analysis type: {type(analysis)}")
+            self.logger.info(f"Analysis score: {analysis.get('score', 0)}")
+            self.logger.info(f"Analysis trend: {analysis.get('trend', {})}")
+            self.logger.info(f"Analysis regime: {analysis.get('regime', {})}")
+            
+            if not analysis or not isinstance(analysis, dict):
+                return self._create_no_trade_decision(f"Análise inválida: {type(analysis)}")
+            
+            # Score mínimo reduzido para 0.25 para permitir mais trades
+            if analysis.get('score', 0) < 0.25:
+                return self._create_no_trade_decision(f"Análise insuficiente (score={analysis.get('score', 0):.2f})")
             
             # 2. Seleciona estratégia (se adaptativo)
             selected_strategy, confidence = await self._select_strategy(analysis)
@@ -486,7 +536,9 @@ class TradingEngine:
             return decision
             
         except Exception as e:
+            import traceback
             self.logger.error(f"Erro em analyze_and_decide: {e}")
+            self.logger.error(f"Traceback: {traceback.format_exc()}")
             return self._create_no_trade_decision(f"Erro: {str(e)}")
     
     async def _run_full_analysis(
@@ -520,8 +572,21 @@ class TradingEngine:
         
         # Modo adaptativo - seleciona baseado no regime
         regime = analysis.get('regime', {})
-        trend_strength = analysis.get('trend', {}).get('strength', 50)
-        volatility = analysis.get('volatility', {}).get('level', 'medium')
+        
+        # trend pode ser string ('bullish'/'bearish') ou dict
+        trend_data = analysis.get('trend', {})
+        if isinstance(trend_data, dict):
+            trend_strength = trend_data.get('strength', 50)
+        else:
+            # trend é string, usa trend_strength separado
+            trend_strength = analysis.get('trend_strength', 50)
+        
+        # volatility pode ser dict ou string
+        vol_data = analysis.get('volatility', {})
+        if isinstance(vol_data, dict):
+            volatility = vol_data.get('level', 'medium')
+        else:
+            volatility = vol_data if vol_data else 'medium'
         
         scores = {}
         
@@ -551,7 +616,11 @@ class TradingEngine:
         best_strategy = max(scores, key=scores.get)
         best_score = scores[best_strategy]
         
-        if best_score < 0.4:
+        self.logger.info(f"Strategy scores: {scores}")
+        self.logger.info(f"Best strategy: {best_strategy} (score={best_score:.2f})")
+        
+        # Score mínimo reduzido de 0.4 para 0.25 para permitir mais trades
+        if best_score < 0.25:
             return None, 0.0
         
         self._active_strategy = best_strategy
@@ -716,42 +785,40 @@ class TradingEngine:
         else:
             confirmations.append(f"R:R: {risk_reward:.1f}")
         
-        # Validação Kelly
+        # Validação Kelly simplificada
         kelly = 0.0
         if self.risk_manager:
-            kelly_result = self.risk_manager.calculate_kelly_criterion(
-                win_rate=self.statistics.win_rate or 0.5,
-                avg_win_loss_ratio=risk_reward
-            )
-            kelly = kelly_result.kelly_fraction
-            
-            if kelly < 0.01:
-                reasons.append("Kelly negativo/muito baixo")
-            else:
-                confirmations.append(f"Kelly: {kelly:.1%}")
+            try:
+                # Tenta usar o método do risk_manager se disponível
+                if hasattr(self.risk_manager, 'calculate_kelly_criterion'):
+                    kelly_result = self.risk_manager.calculate_kelly_criterion(
+                        win_rate=self.statistics.win_rate or 0.5,
+                        avg_win_loss_ratio=risk_reward
+                    )
+                    kelly = kelly_result.kelly_fraction
+                else:
+                    # Cálculo simplificado: Kelly = (win_rate * R:R - (1-win_rate)) / R:R
+                    win_rate = self.statistics.win_rate or 0.5
+                    kelly = (win_rate * risk_reward - (1 - win_rate)) / risk_reward if risk_reward > 0 else 0
+                    kelly = max(0, min(kelly, 0.25))  # Limita Kelly entre 0 e 25%
+                
+                if kelly < 0.01:
+                    # Não bloqueia se Kelly baixo, apenas avisa
+                    confirmations.append(f"Kelly: {kelly:.1%} (baixo)")
+                else:
+                    confirmations.append(f"Kelly: {kelly:.1%}")
+            except Exception as e:
+                self.logger.warning(f"Erro calculando Kelly: {e}")
+                confirmations.append("Kelly: N/A")
         
-        # Validação VaR
-        var_impact = 0.0
-        if self.risk_manager:
-            var_result = self.risk_manager.calculate_monte_carlo_var(
-                position_returns=[-0.01, 0.02, -0.005, 0.015, -0.008],  # Histórico simplificado
-                position_value=risk,
-                confidence_level=0.95,
-                num_simulations=1000,
-                horizon_days=1
-            )
-            var_impact = var_result.var_amount / self.risk_manager.account_balance
-            
-            if var_impact > 0.05:  # Mais de 5% do capital
-                reasons.append(f"VaR alto ({var_impact:.1%})")
+        # Validação de risco simples
+        # Verifica se o risco é aceitável (máx 2% do capital)
+        if self.risk_manager and hasattr(self.risk_manager, 'account_balance'):
+            max_risk_amount = self.risk_manager.account_balance * 0.02  # 2% max
+            if risk > max_risk_amount:
+                reasons.append(f"Risco alto ({risk:.2f} > {max_risk_amount:.2f})")
             else:
-                confirmations.append(f"VaR: {var_impact:.1%}")
-        
-        # Equity curve trading
-        if self.risk_manager:
-            should_trade = self.risk_manager.should_trade_equity_curve()
-            if not should_trade:
-                reasons.append("Equity curve desfavorável")
+                confirmations.append(f"Risco: ${risk:.2f}")
         
         approved = len(reasons) == 0
         
@@ -761,7 +828,6 @@ class TradingEngine:
             'reasons': reasons,
             'risk_reward': risk_reward,
             'kelly': kelly,
-            'var_impact': var_impact,
         }
     
     async def _calculate_position_size(
@@ -782,22 +848,28 @@ class TradingEngine:
         # Usa Kelly com limite de segurança
         kelly = risk_validation.get('kelly', 0)
         
-        # Position sizing usando risk manager
-        size = self.risk_manager.calculate_position_size(
-            entry_price=entry,
-            stop_loss=sl,
-        )
+        try:
+            # Cálculo simplificado: risco 1% do capital
+            risk = abs(entry - sl)
+            account_balance = getattr(self.risk_manager, 'account_balance', 5000)
+            max_risk = account_balance * 0.01  # 1% do capital
+            
+            # Para XAUUSD, cada ponto = $1 por lote padrão
+            if 'XAU' in self.symbol or 'GOLD' in self.symbol.upper():
+                size = max_risk / risk if risk > 0 else 0.01
+            else:
+                # Para forex, calcular baseado em pips
+                point_value = 0.0001 if 'JPY' not in self.symbol else 0.01
+                pips = risk / point_value
+                size = max_risk / (pips * 10) if pips > 0 else 0.01  # 10 USD por pip em lot padrão
+            
+            size = float(size) if size else 0.01
+        except Exception as e:
+            self.logger.warning(f"Erro calculando position size: {e}, usando 0.01")
+            size = 0.01
         
-        # Aplica ajuste anti-martingale se em sequência positiva
-        position_result = self.risk_manager.calculate_anti_martingale(
-            base_position_size=size,
-            consecutive_wins=self._count_consecutive_wins(),
-        )
-        
-        final_size = position_result.recommended_size
-        
-        # Garante mínimo e máximo
-        return max(0.01, min(5.0, final_size))
+        # Garante mínimo e máximo - CONSERVADOR para conta de $5000
+        return max(0.01, min(0.01, size))  # Fixo 0.01 lotes para conservar capital
     
     def _count_consecutive_wins(self) -> int:
         """Conta vitórias consecutivas recentes."""

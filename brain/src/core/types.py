@@ -344,6 +344,10 @@ class EconomicEvent:
     name_pt: Optional[str] = None
 
 
+# Alias para compatibilidade
+CalendarEvent = EconomicEvent
+
+
 # ============================================================================
 # DATA CLASSES - RELATÓRIOS
 # ============================================================================

@@ -14,13 +14,14 @@ from datetime import datetime
 import json
 import sys
 
-# Adiciona path do src
-BRAIN_PATH = Path(__file__).parent.parent.parent.parent
+# Caminho raiz do Virtus - corrigido para estrutura real do sistema
+VIRTUS_ROOT = Path("C:/Users/Administrator/Desktop/Virtus")
+BRAIN_PATH = VIRTUS_ROOT / "brain"
 sys.path.insert(0, str(BRAIN_PATH))
 
 router = APIRouter(prefix="/social", tags=["Social Media"])
 
-# Diretórios
+# Diretórios - usando caminho absoluto correto
 DATA_DIR = BRAIN_PATH / "data" / "social_media"
 IMAGES_DIR = DATA_DIR / "images"
 POSTS_DIR = DATA_DIR / "posts"
@@ -448,3 +449,189 @@ async def get_pending_posts():
         "pending": pending[::-1],  # Mais recentes primeiro
         "count": len(pending),
     }
+
+
+# ============================================================
+# BRIEFING DIÁRIO - Integração com EODHD + ForexNews + Investing
+# ============================================================
+
+@router.post("/briefing/generate")
+async def generate_daily_briefing():
+    """
+    Gera post de briefing diário para redes sociais.
+    
+    Integra dados de múltiplas fontes:
+    - EODHD API (notícias e calendário econômico)
+    - ForexNews API (notícias forex em tempo real)
+    - Investing.com (notícias gerais)
+    - TESS AI (análise de sentimento)
+    
+    Cria:
+    - Imagem com design Virtus
+    - Caption completa pronta para Instagram
+    - Informações sobre sinais, eventos e notícias
+    """
+    try:
+        from services.social_briefing_generator import social_briefing_generator
+        
+        post = await social_briefing_generator.generate_daily_briefing_post()
+        
+        # Recarrega para incluir o novo post
+        load_posts()
+        
+        return {
+            "success": True,
+            "post": post,
+            "message": "✅ Briefing diário gerado com sucesso! Pronto para postar."
+        }
+        
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(500, f"Erro ao gerar briefing: {str(e)}")
+
+
+@router.get("/briefing/preview")
+async def preview_briefing():
+    """
+    Prévia do briefing sem gerar imagem.
+    
+    Útil para verificar os dados antes de gerar o post completo.
+    """
+    try:
+        from services.social_briefing_generator import social_briefing_generator
+        
+        await social_briefing_generator.initialize()
+        data = await social_briefing_generator._collect_all_data()
+        
+        # Gera apenas o texto
+        caption = await social_briefing_generator._generate_briefing_caption(
+            data, 
+            datetime.now()
+        )
+        
+        return {
+            "success": True,
+            "preview": {
+                "caption": caption,
+                "market_mood": data.get('market_mood'),
+                "news_count": len(data.get('news', [])),
+                "events_count": len(data.get('events', [])),
+                "signals": data.get('signals', {}),
+                "sources": data.get('sources', []),
+            }
+        }
+        
+    except Exception as e:
+        raise HTTPException(500, f"Erro ao gerar prévia: {str(e)}")
+
+
+# ============================================================
+# NOTÍCIAS BRASILEIRAS - Seleção manual para posts
+# ============================================================
+
+@router.get("/news/brazil")
+async def get_brazil_news_for_social(limit: int = 10):
+    """
+    Busca notícias de ações brasileiras para seleção manual.
+    
+    Retorna notícias traduzidas prontas para criar posts.
+    """
+    try:
+        from services.portal_service import get_portal_service
+        
+        service = get_portal_service()
+        news = await service.get_eodhd_news(limit=limit)
+        
+        return {
+            "success": True,
+            "count": len(news),
+            "news": [n.to_dict() for n in news]
+        }
+        
+    except Exception as e:
+        raise HTTPException(500, f"Erro ao buscar notícias: {str(e)}")
+
+
+@router.get("/news/all")
+async def get_all_news_for_social(limit: int = 15):
+    """
+    Busca todas as notícias (forex + brasil) para seleção manual.
+    """
+    try:
+        from services.portal_service import get_portal_service
+        
+        service = get_portal_service()
+        
+        # Busca ambas as fontes
+        forex_news = await service.get_forex_news(limit=limit//2)
+        brazil_news = await service.get_eodhd_news(limit=limit//2)
+        
+        all_news = []
+        for n in forex_news:
+            all_news.append(n.to_dict())
+        for n in brazil_news:
+            all_news.append(n.to_dict())
+        
+        # Ordena por data
+        all_news.sort(key=lambda x: x.get('published_at', ''), reverse=True)
+        
+        return {
+            "success": True,
+            "count": len(all_news),
+            "news": all_news[:limit]
+        }
+        
+    except Exception as e:
+        raise HTTPException(500, f"Erro ao buscar notícias: {str(e)}")
+
+
+class SelectedNewsRequest(BaseModel):
+    """Request para gerar post de notícia selecionada."""
+    title: str
+    summary: str
+    sentiment: str = "neutral"
+    category: str = "stocks_br"
+    tickers: List[str] = []
+    source: str = ""
+
+
+@router.post("/generate/from-selected-news")
+async def generate_from_selected_news(request: SelectedNewsRequest):
+    """
+    Gera post a partir de uma notícia selecionada pelo usuário.
+    
+    Permite escolher qual notícia virar post antes de gerar.
+    """
+    try:
+        from services.auto_post_generator import auto_generator
+        
+        # Prepara dados da notícia no formato esperado
+        news_data = {
+            'title': request.title,
+            'summary': request.summary,
+            'sentiment': request.sentiment,
+            'category': request.category,
+            'tickers': request.tickers,
+            'source': request.source,
+            'published_at': datetime.now().isoformat()
+        }
+        
+        # Gera o post
+        post = await auto_generator.generate_single_news_post(news_data)
+        
+        if post:
+            load_posts()
+            return {
+                "success": True,
+                "post": post,
+                "message": "✅ Post gerado com sucesso!"
+            }
+        else:
+            raise HTTPException(500, "Falha ao gerar post")
+        
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(500, f"Erro ao gerar post: {str(e)}")
+

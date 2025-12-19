@@ -1,6 +1,8 @@
 # ============================================================
 # 🥇 GOLD BOT - Bot para XAUUSD
 # ============================================================
+# NOTA: O enabled aqui pode ser sobrescrito pelo config.yaml principal
+# Para habilitar/desabilitar bots, prefira usar o config.yaml principal
 
 bot:
   id: "gold"
@@ -26,11 +28,11 @@ strategies:
       min_volatility_atr: 0.5
       max_volatility_atr: 3.0
       
-    # RSI
+    # RSI - Ajustado para mais sinais
     rsi:
       period: 14
-      oversold: 30
-      overbought: 70
+      oversold: 40  # Era 30 - mais oportunidades de compra
+      overbought: 60  # Era 70 - mais oportunidades de venda
       
     # Bollinger Bands
     bollinger:

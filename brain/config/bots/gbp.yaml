@@ -1,12 +1,14 @@
 # ============================================================
 # 💷 GBP BOT - Bot para GBPUSD
 # ============================================================
+# NOTA: O enabled aqui pode ser sobrescrito pelo config.yaml principal
+# Para habilitar/desabilitar bots, prefira usar o config.yaml principal
 
 bot:
   id: "gbp"
   name: "BRAIN GBP Bot"
   symbol: "GBPUSD"
-  enabled: true
+  enabled: false  # Desabilitado - config.yaml principal controla
   description: "Bot especializado em Libra - Breakout Trading"
 
 # Estratégias habilitadas

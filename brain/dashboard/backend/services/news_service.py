@@ -3,6 +3,7 @@ VIRTUS Dashboard - Serviço de Notícias com Áudio
 =================================================
 
 Fornece notícias financeiras em português com síntese de voz.
+Integrado com o BrainService para dados em tempo real.
 """
 
 import asyncio
@@ -17,8 +18,24 @@ from dataclasses import dataclass, field
 from enum import Enum
 import logging
 import json
+import sys
 
 logger = logging.getLogger(__name__)
+
+# Adiciona path do src para imports do Brain
+BRAIN_PATH = Path(__file__).parent.parent.parent.parent
+sys.path.insert(0, str(BRAIN_PATH))
+sys.path.insert(0, str(BRAIN_PATH / "src"))
+
+# Tenta importar módulos do Brain
+BRAIN_AVAILABLE = False
+try:
+    from src.brain.brain_service import BrainService
+    from src.core.types import NewsItem as BrainNewsItem, CalendarEvent, NewsImpact
+    BRAIN_AVAILABLE = True
+    logger.info("✅ Brain modules disponíveis para integração de notícias")
+except ImportError as e:
+    logger.warning(f"⚠️ Brain modules não disponíveis: {e}")
 
 # Diretório para cache de áudio
 AUDIO_CACHE_DIR = Path(__file__).parent.parent.parent.parent / "data" / "audio_cache"
@@ -200,6 +217,7 @@ class NewsService:
     Serviço de notícias financeiras em português.
     
     Fontes:
+    - Brain Service (notícias do bot em tempo real)
     - Investing.com BR
     - InfoMoney
     - Valor Econômico
@@ -211,6 +229,10 @@ class NewsService:
         self.news_cache: Dict[str, NewsItem] = {}
         self.last_fetch: Dict[NewsCategory, datetime] = {}
         self.fetch_interval = timedelta(minutes=15)
+        
+        # Brain Service (se disponível)
+        self._brain: Optional[Any] = None
+        self._brain_initialized = False
         
         # Palavras-chave para categorização
         self.category_keywords = {
@@ -246,6 +268,130 @@ class NewsService:
             'perda', 'prejuízo', 'recua', 'tombo', 'recessão'
         ]
     
+    async def _init_brain(self):
+        """Inicializa conexão com o BrainService."""
+        if self._brain_initialized:
+            return
+        
+        if not BRAIN_AVAILABLE:
+            self._brain_initialized = True
+            return
+        
+        try:
+            # Tenta inicializar o BrainService
+            self._brain = BrainService()
+            await self._brain.initialize()
+            self._brain_initialized = True
+            logger.info("✅ BrainService inicializado para notícias")
+        except Exception as e:
+            logger.warning(f"⚠️ Não foi possível inicializar BrainService: {e}")
+            self._brain = None
+            self._brain_initialized = True
+    
+    async def _fetch_brain_news(self) -> List[NewsItem]:
+        """Busca notícias do BrainService."""
+        news = []
+        
+        if not BRAIN_AVAILABLE or not self._brain:
+            return news
+        
+        try:
+            # Busca notícias do Brain
+            brain_news = await self._brain.get_news(
+                symbols=['XAUUSD', 'EURUSD', 'GBPUSD'],
+                limit=10,
+                hours_back=24
+            )
+            
+            for bn in brain_news:
+                # Converte BrainNewsItem para NewsItem do dashboard
+                category = self._categorize_news(bn.title + " " + (bn.content or ""))
+                sentiment, impact = self._analyze_sentiment(bn.title + " " + (bn.content or ""))
+                
+                # Mapeia impacto do Brain para prioridade
+                if hasattr(bn, 'impact'):
+                    if bn.impact == NewsImpact.HIGH:
+                        priority = NewsPriority.HIGH
+                    elif bn.impact == NewsImpact.MEDIUM:
+                        priority = NewsPriority.MEDIUM
+                    else:
+                        priority = NewsPriority.LOW
+                else:
+                    priority = NewsPriority.MEDIUM
+                
+                news_item = NewsItem(
+                    id=f"brain_{hashlib.md5(bn.title.encode()).hexdigest()[:12]}",
+                    title=bn.title,
+                    summary=bn.content[:200] + "..." if bn.content and len(bn.content) > 200 else (bn.content or bn.title),
+                    content=bn.content or bn.title,
+                    source=bn.source if hasattr(bn, 'source') else "Brain Analysis",
+                    category=category,
+                    priority=priority,
+                    published_at=bn.timestamp if hasattr(bn, 'timestamp') else datetime.now(),
+                    url=bn.url if hasattr(bn, 'url') else None,
+                    related_symbols=bn.symbols if hasattr(bn, 'symbols') else [],
+                    sentiment=sentiment,
+                    impact_score=impact,
+                )
+                news.append(news_item)
+            
+            logger.info(f"📰 {len(news)} notícias obtidas do Brain")
+            
+        except Exception as e:
+            logger.warning(f"Erro ao buscar notícias do Brain: {e}")
+        
+        return news
+    
+    async def _fetch_brain_calendar(self) -> List[NewsItem]:
+        """Busca eventos do calendário econômico do BrainService."""
+        news = []
+        
+        if not BRAIN_AVAILABLE or not self._brain:
+            return news
+        
+        try:
+            # Busca eventos do calendário
+            events = await self._brain.get_calendar_events(days_ahead=1, min_impact="medium")
+            
+            for event in events:
+                # Converte CalendarEvent para NewsItem
+                impact_emoji = "🔴" if event.impact == NewsImpact.HIGH else "🟡" if event.impact == NewsImpact.MEDIUM else "🟢"
+                
+                title = event.name_pt if event.name_pt else event.name
+                summary = f"{impact_emoji} {event.country} - {event.datetime.strftime('%H:%M')}"
+                
+                content = f"Evento: {title}\n"
+                content += f"País: {event.country}\n"
+                content += f"Horário: {event.datetime.strftime('%H:%M')}\n"
+                if event.forecast:
+                    content += f"Previsão: {event.forecast}\n"
+                if event.previous:
+                    content += f"Anterior: {event.previous}\n"
+                
+                priority = NewsPriority.HIGH if event.impact == NewsImpact.HIGH else NewsPriority.MEDIUM
+                
+                news_item = NewsItem(
+                    id=f"cal_{event.id}",
+                    title=f"📅 {title}",
+                    summary=summary,
+                    content=content,
+                    source="Calendário Econômico",
+                    category=NewsCategory.ECONOMY,
+                    priority=priority,
+                    published_at=event.datetime,
+                    related_symbols=[event.currency] if event.currency else [],
+                    sentiment='neutral',
+                    impact_score=0.8 if event.impact == NewsImpact.HIGH else 0.5,
+                )
+                news.append(news_item)
+            
+            logger.info(f"📅 {len(news)} eventos do calendário obtidos do Brain")
+            
+        except Exception as e:
+            logger.warning(f"Erro ao buscar calendário do Brain: {e}")
+        
+        return news
+
     async def fetch_news(
         self,
         category: NewsCategory = NewsCategory.ALL,
@@ -253,6 +399,11 @@ class NewsService:
     ) -> List[NewsItem]:
         """
         Busca notícias de múltiplas fontes.
+        
+        Prioridade:
+        1. BrainService (notícias em tempo real do bot)
+        2. RSS Feeds (Investing, InfoMoney, Valor)
+        3. Calendário Econômico
         
         Args:
             category: Categoria de notícias
@@ -263,11 +414,16 @@ class NewsService:
         """
         news_items = []
         
+        # Inicializa Brain se ainda não foi feito
+        await self._init_brain()
+        
         # Busca de múltiplas fontes em paralelo
         tasks = [
+            self._fetch_brain_news(),        # Notícias do Brain (prioridade)
+            self._fetch_brain_calendar(),    # Calendário do Brain
             self._fetch_investing_br(),
             self._fetch_rss_feeds(),
-            self._fetch_economic_calendar(),
+            self._fetch_economic_calendar(), # Fallback local
         ]
         
         results = await asyncio.gather(*tasks, return_exceptions=True)
@@ -275,6 +431,16 @@ class NewsService:
         for result in results:
             if isinstance(result, list):
                 news_items.extend(result)
+        
+        # Remove duplicatas por título similar
+        seen_titles = set()
+        unique_news = []
+        for item in news_items:
+            normalized = item.title.lower().strip()[:50]
+            if normalized not in seen_titles:
+                seen_titles.add(normalized)
+                unique_news.append(item)
+        news_items = unique_news
         
         # Filtra por categoria
         if category != NewsCategory.ALL:

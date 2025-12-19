@@ -360,7 +360,20 @@ class SignalGenerator:
             return None
         
         score = analysis.get('score', 0)
-        trend = analysis.get('trend', {}).get('direction', TrendDirection.NEUTRAL)
+        
+        # trend pode ser string ou dict
+        trend_data = analysis.get('trend', {})
+        if isinstance(trend_data, dict):
+            trend = trend_data.get('direction', TrendDirection.NEUTRAL)
+        else:
+            # trend é string ('bullish'/'bearish'), converte
+            if trend_data == 'bullish':
+                trend = TrendDirection.UP
+            elif trend_data == 'bearish':
+                trend = TrendDirection.DOWN
+            else:
+                trend = TrendDirection.NEUTRAL
+        
         signals = analysis.get('signals', [])
         
         # Determina direção
@@ -390,10 +403,10 @@ class SignalGenerator:
             weight=self.weights[SignalSource.TECHNICAL],
             metadata={
                 'score': score,
-                'trend': trend.name,
+                'trend': trend.name if hasattr(trend, 'name') else str(trend),
                 'signals_count': len(signals),
-                'rsi': analysis.get('momentum', {}).get('rsi'),
-                'macd_hist': analysis.get('trend', {}).get('macd', {}).get('histogram'),
+                'rsi': analysis.get('momentum', {}).get('rsi') if isinstance(analysis.get('momentum'), dict) else None,
+                'macd_hist': None,  # Evita acesso aninhado que pode falhar
             }
         )
     

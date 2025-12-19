@@ -1,70 +1,74 @@
 import { useEffect, useState } from 'react'
-import { dashboardAPI, mt5API } from '../services/api'
-import { useTradingStore } from '../stores/tradingStore'
-import {
-  LineChart,
-  Line,
-  AreaChart,
-  Area,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
-} from 'recharts'
+import { systemAPI } from '../services/api'
+import { getMarketSummary, MarketSummary } from '../services/brapiService'
 import {
   TrendingUp,
   TrendingDown,
   DollarSign,
-  Target,
   Activity,
-  Percent,
+  RefreshCw,
+  Globe,
+  Building2,
+  Bitcoin,
+  Landmark,
   BarChart3,
   Clock,
-  ArrowUpRight,
-  ArrowDownRight,
-  RefreshCw,
+  Calendar,
+  AlertCircle,
   CheckCircle,
-  XCircle,
-  AlertTriangle,
+  Sun,
+  Moon,
 } from 'lucide-react'
-import { formatCurrency, formatPercent, cn } from '../lib/utils'
+import { cn } from '../lib/utils'
+import { SkeletonDashboard } from '../components/ui/Skeleton'
 import NewsAudioPlayer from '../components/NewsAudioPlayer'
 
-interface OverviewData {
-  account: any
-  metrics: any
-  bots_status: { total: number; running: number; stopped: number }
-  strategies_status: { total: number; enabled: number }
-  symbols_status: { total: number; enabled: number }
-  mt5_connected: boolean
-}
-
-interface EquityData {
-  timestamp: string
-  balance: number
-  equity: number
+interface SystemHealth {
+  api: boolean
+  database: boolean
+  websocket: boolean
+  brapi: boolean
+  eodhd: boolean
+  tess: boolean
 }
 
 export default function DashboardPage() {
-  const [overview, setOverview] = useState<OverviewData | null>(null)
-  const [equityHistory, setEquityHistory] = useState<EquityData[]>([])
+  const [marketData, setMarketData] = useState<MarketSummary | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [isRefreshing, setIsRefreshing] = useState(false)
-  const { metrics, isConnected } = useTradingStore()
+  const [lastUpdate, setLastUpdate] = useState<Date>(new Date())
+  const [systemHealth, setSystemHealth] = useState<SystemHealth>({
+    api: true,
+    database: true,
+    websocket: true,
+    brapi: true,
+    eodhd: true,
+    tess: true,
+  })
   
   const loadData = async (showRefresh = false) => {
     if (showRefresh) setIsRefreshing(true)
     else setIsLoading(true)
     
     try {
-      const [overviewRes, equityRes] = await Promise.all([
-        dashboardAPI.getOverview(),
-        dashboardAPI.getEquityHistory(30),
+      const [marketRes, statusRes] = await Promise.all([
+        getMarketSummary(),
+        systemAPI.getStatus().catch(() => null),
       ])
       
-      setOverview(overviewRes.data)
-      setEquityHistory(equityRes.data.history)
+      setMarketData(marketRes)
+      setLastUpdate(new Date())
+      
+      if (statusRes?.data) {
+        setSystemHealth({
+          api: statusRes.data.status === 'healthy',
+          database: statusRes.data.components?.database === 'healthy',
+          websocket: true,
+          brapi: true,
+          eodhd: true,
+          tess: true,
+        })
+      }
     } catch (error) {
       console.error('Failed to load dashboard data:', error)
     } finally {
@@ -75,311 +79,376 @@ export default function DashboardPage() {
   
   useEffect(() => {
     loadData()
+    
+    // Auto refresh every 60 seconds
+    const interval = setInterval(() => {
+      loadData(true)
+    }, 60000)
+    
+    return () => clearInterval(interval)
   }, [])
   
-  // Use real-time metrics if available, fallback to overview
-  const currentMetrics = metrics || overview?.metrics
+  const getChangeColor = (value: number) => {
+    if (value > 0) return 'text-virtus-accent-success'
+    if (value < 0) return 'text-virtus-accent-danger'
+    return 'text-virtus-text-muted'
+  }
+  
+  const formatPercent = (value: number | null | undefined) => {
+    if (value === null || value === undefined) return '0.00%'
+    const sign = value >= 0 ? '+' : ''
+    return `${sign}${value.toFixed(2)}%`
+  }
+  
+  const formatNumber = (value: number | null | undefined) => {
+    if (value === null || value === undefined) return '0'
+    return value.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+  }
+  
+  // Get greeting based on time
+  const getGreeting = () => {
+    const hour = new Date().getHours()
+    if (hour < 12) return 'Bom dia'
+    if (hour < 18) return 'Boa tarde'
+    return 'Boa noite'
+  }
+  
+  // Check if market is open (B3: 10:00 - 17:55 Brasília time)
+  const isMarketOpen = () => {
+    // Usar horário de Brasília (UTC-3)
+    const now = new Date()
+    const brasiliaTime = new Date(now.toLocaleString('en-US', { timeZone: 'America/Sao_Paulo' }))
+    const hour = brasiliaTime.getHours()
+    const minute = brasiliaTime.getMinutes()
+    const day = brasiliaTime.getDay()
+    
+    // Weekend
+    if (day === 0 || day === 6) return false
+    
+    // Before 10:00 or after 17:55
+    if (hour < 10 || (hour === 17 && minute > 55) || hour > 17) return false
+    
+    return true
+  }
   
   if (isLoading) {
-    return (
-      <div className="flex items-center justify-center h-96">
-        <RefreshCw className="w-8 h-8 animate-spin text-virtus-accent-primary" />
-      </div>
-    )
+    return <SkeletonDashboard />
   }
+  
+  // Extract data from marketData
+  const ibov = marketData?.ibovespa?.results?.[0]
+  const currencies = marketData?.currencies?.currency || []
+  const cryptos = marketData?.crypto?.coins || []
+  const usd = currencies.find(c => c.fromCurrency === 'USD')
+  const eur = currencies.find(c => c.fromCurrency === 'EUR')
+  const btc = cryptos.find(c => c.coin === 'BTC')
+  const topStocks = marketData?.topGainers?.stocks?.slice(0, 5) || []
+  const topFiis = marketData?.topLosers?.stocks?.slice(0, 5) || []
   
   return (
     <div className="space-y-4 sm:space-y-6 animate-fadeIn">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
-          <h1 className="text-xl sm:text-2xl font-bold">Dashboard</h1>
-          <p className="text-sm sm:text-base text-virtus-text-muted">Visão geral do sistema de trading</p>
-        </div>
-        <button
-          onClick={() => loadData(true)}
-          disabled={isRefreshing}
-          className="btn-secondary flex items-center justify-center gap-2 w-full sm:w-auto"
-        >
-          <RefreshCw className={cn('w-4 h-4', isRefreshing && 'animate-spin')} />
-          <span>Atualizar</span>
-        </button>
-      </div>
-      
-      {/* Status Cards */}
-      <div className="grid grid-cols-2 gap-2 sm:gap-4 md:grid-cols-4">
-        {/* MT5 Status */}
-        <div className="card-hover">
-          <div className="flex items-center justify-between">
-            <span className="text-virtus-text-muted text-sm">MT5 Status</span>
-            {overview?.mt5_connected ? (
-              <CheckCircle className="w-5 h-5 text-virtus-accent-success" />
+          <h1 className="text-xl sm:text-2xl font-bold flex items-center gap-2">
+            {getGreeting()}! 
+            {new Date().getHours() < 18 ? (
+              <Sun className="w-6 h-6 text-yellow-500" />
             ) : (
-              <XCircle className="w-5 h-5 text-virtus-accent-danger" />
+              <Moon className="w-6 h-6 text-blue-400" />
             )}
-          </div>
-          <p className={cn(
-            'text-lg font-semibold mt-1',
-            overview?.mt5_connected ? 'text-virtus-accent-success' : 'text-virtus-accent-danger'
-          )}>
-            {overview?.mt5_connected ? 'Conectado' : 'Desconectado'}
+          </h1>
+          <p className="text-sm sm:text-base text-virtus-text-muted flex items-center gap-2">
+            <Calendar className="w-4 h-4" />
+            {new Date().toLocaleDateString('pt-BR', { 
+              weekday: 'long', 
+              day: 'numeric', 
+              month: 'long', 
+              year: 'numeric' 
+            })}
           </p>
         </div>
-        
-        {/* Bots Status */}
-        <div className="card-hover">
-          <div className="flex items-center justify-between">
-            <span className="text-virtus-text-muted text-sm">Bots Ativos</span>
-            <Activity className="w-5 h-5 text-virtus-accent-primary" />
-          </div>
-          <p className="text-lg font-semibold mt-1">
-            {overview?.bots_status?.running ?? 0}/{overview?.bots_status?.total ?? 0}
-          </p>
-        </div>
-        
-        {/* Strategies */}
-        <div className="card-hover">
-          <div className="flex items-center justify-between">
-            <span className="text-virtus-text-muted text-sm">Estratégias</span>
-            <Target className="w-5 h-5 text-virtus-accent-secondary" />
-          </div>
-          <p className="text-lg font-semibold mt-1">
-            {overview?.strategies_status?.enabled ?? 0}/{overview?.strategies_status?.total ?? 0}
-          </p>
-        </div>
-        
-        {/* Symbols */}
-        <div className="card-hover">
-          <div className="flex items-center justify-between">
-            <span className="text-virtus-text-muted text-sm">Símbolos</span>
-            <BarChart3 className="w-5 h-5 text-virtus-accent-info" />
-          </div>
-          <p className="text-lg font-semibold mt-1">
-            {overview?.symbols_status?.enabled ?? 0}/{overview?.symbols_status?.total ?? 0}
-          </p>
-        </div>
-      </div>
-      
-      {/* Main Metrics */}
-      <div className="grid grid-cols-2 gap-2 sm:gap-4 lg:grid-cols-4">
-        {/* Balance */}
-        <div className="stat-card">
-          <div className="flex items-center justify-between">
-            <span className="stat-label">Saldo</span>
-            <DollarSign className="w-5 h-5 text-virtus-accent-primary" />
-          </div>
-          <p className="stat-value">{formatCurrency(currentMetrics?.balance || 0)}</p>
-        </div>
-        
-        {/* Equity */}
-        <div className="stat-card">
-          <div className="flex items-center justify-between">
-            <span className="stat-label">Patrimônio</span>
-            <TrendingUp className="w-5 h-5 text-virtus-accent-success" />
-          </div>
-          <p className="stat-value">{formatCurrency(currentMetrics?.equity || 0)}</p>
+        <div className="flex items-center gap-3">
+          {/* Market Status */}
           <div className={cn(
-            'stat-change flex items-center gap-1',
-            (currentMetrics?.profit || 0) >= 0 ? 'stat-change-positive' : 'stat-change-negative'
+            'flex items-center gap-2 px-3 py-1.5 rounded-full text-sm font-medium',
+            isMarketOpen() 
+              ? 'bg-virtus-accent-success/20 text-virtus-accent-success' 
+              : 'bg-virtus-accent-warning/20 text-virtus-accent-warning'
           )}>
-            {(currentMetrics?.profit || 0) >= 0 ? (
-              <ArrowUpRight className="w-4 h-4" />
+            <span className={cn(
+              'w-2 h-2 rounded-full',
+              isMarketOpen() ? 'bg-virtus-accent-success animate-pulse' : 'bg-virtus-accent-warning'
+            )} />
+            {isMarketOpen() ? 'Mercado Aberto' : 'Mercado Fechado'}
+          </div>
+          
+          <button
+            onClick={() => loadData(true)}
+            disabled={isRefreshing}
+            className="btn-secondary flex items-center justify-center gap-2"
+          >
+            <RefreshCw className={cn('w-4 h-4', isRefreshing && 'animate-spin')} />
+            <span className="hidden sm:inline">Atualizar</span>
+          </button>
+        </div>
+      </div>
+      
+      {/* Main Market Cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        {/* Ibovespa Card */}
+        <div className="card bg-gradient-to-br from-blue-600/20 to-indigo-700/20 border-blue-500/30">
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-2">
+              <div className="w-10 h-10 rounded-lg bg-blue-500/20 flex items-center justify-center">
+                <Building2 className="w-5 h-5 text-blue-500" />
+              </div>
+              <span className="font-medium">Ibovespa</span>
+            </div>
+            {(ibov?.regularMarketChangePercent ?? 0) >= 0 ? (
+              <TrendingUp className="w-5 h-5 text-virtus-accent-success" />
             ) : (
-              <ArrowDownRight className="w-4 h-4" />
+              <TrendingDown className="w-5 h-5 text-virtus-accent-danger" />
             )}
-            <span>{formatCurrency(currentMetrics?.profit || 0)}</span>
           </div>
-        </div>
-        
-        {/* Daily P&L */}
-        <div className="stat-card">
-          <div className="flex items-center justify-between">
-            <span className="stat-label">P&L Diário</span>
-            <Clock className="w-5 h-5 text-virtus-accent-warning" />
-          </div>
-          <p className={cn(
-            'stat-value',
-            (currentMetrics?.daily_pnl || 0) >= 0 ? 'profit' : 'loss'
-          )}>
-            {(currentMetrics?.daily_pnl || 0) >= 0 ? '+' : ''}{formatCurrency(currentMetrics?.daily_pnl || 0)}
+          <p className="text-2xl font-bold">
+            {formatNumber(ibov?.regularMarketPrice)}
+          </p>
+          <p className={cn('text-sm font-medium', getChangeColor(ibov?.regularMarketChangePercent ?? 0))}>
+            {formatPercent(ibov?.regularMarketChangePercent)}
           </p>
         </div>
         
-        {/* Win Rate */}
-        <div className="stat-card">
-          <div className="flex items-center justify-between">
-            <span className="stat-label">Win Rate</span>
-            <Percent className="w-5 h-5 text-virtus-accent-info" />
+        {/* USD Card */}
+        <div className="card bg-gradient-to-br from-green-600/20 to-emerald-700/20 border-green-500/30">
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-2">
+              <div className="w-10 h-10 rounded-lg bg-green-500/20 flex items-center justify-center">
+                <DollarSign className="w-5 h-5 text-green-500" />
+              </div>
+              <span className="font-medium">Dólar</span>
+            </div>
+            {parseFloat(usd?.percentageChange || '0') >= 0 ? (
+              <TrendingUp className="w-5 h-5 text-virtus-accent-success" />
+            ) : (
+              <TrendingDown className="w-5 h-5 text-virtus-accent-danger" />
+            )}
           </div>
-          <p className="stat-value">{(currentMetrics?.win_rate || 0).toFixed(1)}%</p>
-          <p className="text-xs text-virtus-text-muted mt-1">
-            {currentMetrics?.winning_trades || 0}W / {currentMetrics?.losing_trades || 0}L
+          <p className="text-2xl font-bold">
+            R$ {formatNumber(parseFloat(usd?.bidPrice || '0'))}
+          </p>
+          <p className={cn('text-sm font-medium', getChangeColor(parseFloat(usd?.percentageChange || '0')))}>
+            {formatPercent(parseFloat(usd?.percentageChange || '0'))}
+          </p>
+        </div>
+        
+        {/* EUR Card */}
+        <div className="card bg-gradient-to-br from-cyan-600/20 to-blue-700/20 border-cyan-500/30">
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-2">
+              <div className="w-10 h-10 rounded-lg bg-cyan-500/20 flex items-center justify-center">
+                <Globe className="w-5 h-5 text-cyan-500" />
+              </div>
+              <span className="font-medium">Euro</span>
+            </div>
+            {parseFloat(eur?.percentageChange || '0') >= 0 ? (
+              <TrendingUp className="w-5 h-5 text-virtus-accent-success" />
+            ) : (
+              <TrendingDown className="w-5 h-5 text-virtus-accent-danger" />
+            )}
+          </div>
+          <p className="text-2xl font-bold">
+            R$ {formatNumber(parseFloat(eur?.bidPrice || '0'))}
+          </p>
+          <p className={cn('text-sm font-medium', getChangeColor(parseFloat(eur?.percentageChange || '0')))}>
+            {formatPercent(parseFloat(eur?.percentageChange || '0'))}
+          </p>
+        </div>
+        
+        {/* Bitcoin Card */}
+        <div className="card bg-gradient-to-br from-orange-600/20 to-amber-700/20 border-orange-500/30">
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-2">
+              <div className="w-10 h-10 rounded-lg bg-orange-500/20 flex items-center justify-center">
+                <Bitcoin className="w-5 h-5 text-orange-500" />
+              </div>
+              <span className="font-medium">Bitcoin</span>
+            </div>
+            {(btc?.regularMarketChangePercent ?? 0) >= 0 ? (
+              <TrendingUp className="w-5 h-5 text-virtus-accent-success" />
+            ) : (
+              <TrendingDown className="w-5 h-5 text-virtus-accent-danger" />
+            )}
+          </div>
+          <p className="text-2xl font-bold">
+            R$ {btc?.regularMarketPrice ? (btc.regularMarketPrice / 1000).toFixed(1) + 'k' : '0'}
+          </p>
+          <p className={cn('text-sm font-medium', getChangeColor(btc?.regularMarketChangePercent ?? 0))}>
+            {formatPercent(btc?.regularMarketChangePercent ?? 0)}
           </p>
         </div>
       </div>
       
-      {/* Secondary Metrics */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 sm:gap-4">
-        <div className="card p-4">
-          <p className="text-xs text-virtus-text-muted uppercase">Profit Factor</p>
-          <p className="text-xl font-bold mt-1">{(currentMetrics?.profit_factor || 0).toFixed(2)}</p>
-        </div>
-        <div className="card p-4">
-          <p className="text-xs text-virtus-text-muted uppercase">Sharpe Ratio</p>
-          <p className="text-xl font-bold mt-1">{(currentMetrics?.sharpe_ratio || 0).toFixed(2)}</p>
-        </div>
-        <div className="card p-4">
-          <p className="text-xs text-virtus-text-muted uppercase">Max Drawdown</p>
-          <p className="text-xl font-bold text-virtus-accent-danger mt-1">
-            -{(currentMetrics?.max_drawdown || 0).toFixed(2)}%
-          </p>
-        </div>
-        <div className="card p-4">
-          <p className="text-xs text-virtus-text-muted uppercase">Current DD</p>
-          <p className={cn(
-            'text-xl font-bold mt-1',
-            (currentMetrics?.current_drawdown || 0) > 3 ? 'text-virtus-accent-danger' : 'text-virtus-accent-warning'
-          )}>
-            -{(currentMetrics?.current_drawdown || 0).toFixed(2)}%
-          </p>
-        </div>
-        <div className="card p-4">
-          <p className="text-xs text-virtus-text-muted uppercase">Posições Abertas</p>
-          <p className="text-xl font-bold mt-1">{currentMetrics?.active_positions || 0}</p>
-        </div>
-      </div>
-      
-      {/* Charts */}
-      <div className="grid gap-4 sm:gap-6 lg:grid-cols-2">
-        {/* Equity Curve */}
-        <div className="card virtus-card-accent">
-          <h3 className="text-lg font-semibold mb-4">Evolução do Patrimônio</h3>
-          <div className="h-64">
-            <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={(equityHistory || []).slice(-168)}>
-                <defs>
-                  <linearGradient id="equityGradient" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#E53935" stopOpacity={0.3}/>
-                    <stop offset="95%" stopColor="#E53935" stopOpacity={0}/>
-                  </linearGradient>
-                </defs>
-                <CartesianGrid strokeDasharray="3 3" stroke="#2a2a32" />
-                <XAxis 
-                  dataKey="timestamp" 
-                  tickFormatter={(value) => new Date(value).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })}
-                  stroke="#707078"
-                  fontSize={11}
-                />
-                <YAxis 
-                  stroke="#707078"
-                  fontSize={11}
-                  tickFormatter={(value) => `$${(value / 1000).toFixed(1)}k`}
-                />
-                <Tooltip 
-                  contentStyle={{
-                    backgroundColor: '#16161b',
-                    border: '1px solid #2a2a32',
-                    borderRadius: '8px',
-                  }}
-                  formatter={(value: number) => [formatCurrency(value), 'Patrimônio']}
-                  labelFormatter={(label) => new Date(label).toLocaleString('pt-BR')}
-                />
-                <Area 
-                  type="monotone" 
-                  dataKey="equity" 
-                  stroke="#E53935" 
-                  fill="url(#equityGradient)" 
-                  strokeWidth={2}
-                />
-              </AreaChart>
-            </ResponsiveContainer>
+      {/* Top Movers */}
+      <div className="grid lg:grid-cols-2 gap-6">
+        {/* Top Ações - Maiores Altas */}
+        <div className="card">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-lg font-semibold flex items-center gap-2">
+              <TrendingUp className="w-5 h-5 text-virtus-accent-success" />
+              Maiores Altas
+            </h3>
+            <a href="/stocks" className="text-sm text-virtus-accent-primary hover:underline">
+              Ver todas →
+            </a>
+          </div>
+          <div className="space-y-3">
+            {topStocks.length > 0 ? topStocks.map((stock: any, i: number) => (
+              <div key={stock.symbol || i} className="flex items-center justify-between p-3 bg-virtus-bg-tertiary rounded-lg hover:bg-virtus-bg-hover transition-colors">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-lg bg-virtus-accent-success/20 flex items-center justify-center font-bold text-sm">
+                    {(stock.symbol || '??').slice(0, 4)}
+                  </div>
+                  <div>
+                    <p className="font-medium">{stock.symbol || 'N/A'}</p>
+                    <p className="text-xs text-virtus-text-muted truncate max-w-[150px]">
+                      {stock.shortName || stock.longName || 'Empresa'}
+                    </p>
+                  </div>
+                </div>
+                <div className="text-right">
+                  <p className="font-semibold">R$ {formatNumber(stock.regularMarketPrice)}</p>
+                  <p className={cn('text-sm', getChangeColor(stock.regularMarketChangePercent || 0))}>
+                    {formatPercent(stock.regularMarketChangePercent)}
+                  </p>
+                </div>
+              </div>
+            )) : (
+              <p className="text-center text-virtus-text-muted py-8">
+                Carregando ações...
+              </p>
+            )}
           </div>
         </div>
         
-        {/* Balance vs Equity */}
-        <div className="card virtus-card-accent">
-          <h3 className="text-lg font-semibold mb-4">Saldo vs Patrimônio</h3>
-          <div className="h-64">
-            <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={(equityHistory || []).slice(-168)}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#2a2a32" />
-                <XAxis 
-                  dataKey="timestamp" 
-                  tickFormatter={(value) => new Date(value).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })}
-                  stroke="#707078"
-                  fontSize={11}
-                />
-                <YAxis 
-                  stroke="#707078"
-                  fontSize={11}
-                  tickFormatter={(value) => `$${(value / 1000).toFixed(1)}k`}
-                />
-                <Tooltip 
-                  contentStyle={{
-                    backgroundColor: '#16161b',
-                    border: '1px solid #2a2a32',
-                    borderRadius: '8px',
-                  }}
-                  formatter={(value: number, name: string) => [
-                    formatCurrency(value), 
-                    name === 'balance' ? 'Saldo' : 'Patrimônio'
-                  ]}
-                  labelFormatter={(label) => new Date(label).toLocaleString('pt-BR')}
-                />
-                <Line 
-                  type="monotone" 
-                  dataKey="balance" 
-                  stroke="#FF5252" 
-                  strokeWidth={2}
-                  dot={false}
-                />
-                <Line 
-                  type="monotone" 
-                  dataKey="equity" 
-                  stroke="#E53935" 
-                  strokeWidth={2}
-                  dot={false}
-                />
-              </LineChart>
-            </ResponsiveContainer>
+        {/* Top Ações - Maiores Baixas */}
+        <div className="card">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-lg font-semibold flex items-center gap-2">
+              <TrendingDown className="w-5 h-5 text-virtus-accent-danger" />
+              Maiores Baixas
+            </h3>
+            <a href="/stocks" className="text-sm text-virtus-accent-primary hover:underline">
+              Ver todas →
+            </a>
+          </div>
+          <div className="space-y-3">
+            {topFiis.length > 0 ? topFiis.map((stock: any, i: number) => (
+              <div key={stock.symbol || i} className="flex items-center justify-between p-3 bg-virtus-bg-tertiary rounded-lg hover:bg-virtus-bg-hover transition-colors">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-lg bg-virtus-accent-danger/20 flex items-center justify-center font-bold text-sm">
+                    {(stock.symbol || '??').slice(0, 4)}
+                  </div>
+                  <div>
+                    <p className="font-medium">{stock.symbol || 'N/A'}</p>
+                    <p className="text-xs text-virtus-text-muted truncate max-w-[150px]">
+                      {stock.shortName || stock.longName || 'Empresa'}
+                    </p>
+                  </div>
+                </div>
+                <div className="text-right">
+                  <p className="font-semibold">R$ {formatNumber(stock.regularMarketPrice)}</p>
+                  <p className={cn('text-sm', getChangeColor(stock.regularMarketChangePercent || 0))}>
+                    {formatPercent(stock.regularMarketChangePercent)}
+                  </p>
+                </div>
+              </div>
+            )) : (
+              <p className="text-center text-virtus-text-muted py-8">
+                Carregando dados...
+              </p>
+            )}
           </div>
         </div>
       </div>
       
-      {/* P&L Summary */}
-      <div className="card">
-        <h3 className="text-base sm:text-lg font-semibold mb-3 sm:mb-4">Resumo de Performance</h3>
-        <div className="grid grid-cols-3 gap-2 sm:gap-6">
-          <div className="text-center p-2 sm:p-4 bg-virtus-bg-tertiary rounded-lg">
-            <p className="text-xs sm:text-sm text-virtus-text-muted">Diário</p>
-            <p className={cn(
-              'text-sm sm:text-2xl font-bold mt-1 sm:mt-2',
-              (currentMetrics?.daily_pnl || 0) >= 0 ? 'profit' : 'loss'
-            )}>
-              {formatCurrency(currentMetrics?.daily_pnl || 0)}
-            </p>
+      {/* Quick Actions & System Status */}
+      <div className="grid lg:grid-cols-3 gap-6">
+        {/* Quick Actions */}
+        <div className="card lg:col-span-2">
+          <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
+            <Activity className="w-5 h-5 text-virtus-accent-primary" />
+            Acesso Rápido
+          </h3>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <a href="/screener" className="p-4 bg-virtus-bg-tertiary rounded-lg hover:bg-virtus-bg-hover transition-all hover:scale-105 text-center">
+              <BarChart3 className="w-8 h-8 mx-auto mb-2 text-blue-500" />
+              <p className="text-sm font-medium">Screener</p>
+            </a>
+            <a href="/dividends" className="p-4 bg-virtus-bg-tertiary rounded-lg hover:bg-virtus-bg-hover transition-all hover:scale-105 text-center">
+              <DollarSign className="w-8 h-8 mx-auto mb-2 text-green-500" />
+              <p className="text-sm font-medium">Dividendos</p>
+            </a>
+            <a href="/forex" className="p-4 bg-virtus-bg-tertiary rounded-lg hover:bg-virtus-bg-hover transition-all hover:scale-105 text-center">
+              <Globe className="w-8 h-8 mx-auto mb-2 text-purple-500" />
+              <p className="text-sm font-medium">Forex Briefing</p>
+            </a>
+            <a href="/fii-portfolio" className="p-4 bg-virtus-bg-tertiary rounded-lg hover:bg-virtus-bg-hover transition-all hover:scale-105 text-center">
+              <Landmark className="w-8 h-8 mx-auto mb-2 text-orange-500" />
+              <p className="text-sm font-medium">Carteira FIIs</p>
+            </a>
           </div>
-          <div className="text-center p-2 sm:p-4 bg-virtus-bg-tertiary rounded-lg">
-            <p className="text-xs sm:text-sm text-virtus-text-muted">Semanal</p>
-            <p className={cn(
-              'text-sm sm:text-2xl font-bold mt-1 sm:mt-2',
-              (currentMetrics?.weekly_pnl || 0) >= 0 ? 'profit' : 'loss'
-            )}>
-              {formatCurrency(currentMetrics?.weekly_pnl || 0)}
-            </p>
+        </div>
+        
+        {/* System Status */}
+        <div className="card">
+          <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
+            <Activity className="w-5 h-5 text-virtus-accent-primary" />
+            Status do Sistema
+          </h3>
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <span className="text-sm">API Backend</span>
+              {systemHealth.api ? (
+                <CheckCircle className="w-5 h-5 text-virtus-accent-success" />
+              ) : (
+                <AlertCircle className="w-5 h-5 text-virtus-accent-danger" />
+              )}
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-sm">Database</span>
+              {systemHealth.database ? (
+                <CheckCircle className="w-5 h-5 text-virtus-accent-success" />
+              ) : (
+                <AlertCircle className="w-5 h-5 text-virtus-accent-danger" />
+              )}
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-sm">Brapi</span>
+              {systemHealth.brapi ? (
+                <CheckCircle className="w-5 h-5 text-virtus-accent-success" />
+              ) : (
+                <AlertCircle className="w-5 h-5 text-virtus-accent-danger" />
+              )}
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-sm">EODHD</span>
+              {systemHealth.eodhd ? (
+                <CheckCircle className="w-5 h-5 text-virtus-accent-success" />
+              ) : (
+                <AlertCircle className="w-5 h-5 text-virtus-accent-danger" />
+              )}
+            </div>
           </div>
-          <div className="text-center p-2 sm:p-4 bg-virtus-bg-tertiary rounded-lg">
-            <p className="text-xs sm:text-sm text-virtus-text-muted">Mensal</p>
-            <p className={cn(
-              'text-sm sm:text-2xl font-bold mt-1 sm:mt-2',
-              (currentMetrics?.monthly_pnl || 0) >= 0 ? 'profit' : 'loss'
-            )}>
-              {formatCurrency(currentMetrics?.monthly_pnl || 0)}
+          <div className="mt-4 pt-4 border-t border-virtus-border">
+            <p className="text-xs text-virtus-text-muted flex items-center gap-1">
+              <Clock className="w-3 h-3" />
+              Última atualização: {lastUpdate.toLocaleTimeString('pt-BR')}
             </p>
           </div>
         </div>
       </div>
-
+      
       {/* News Audio Player */}
       <div className="card p-0 overflow-hidden">
         <NewsAudioPlayer />

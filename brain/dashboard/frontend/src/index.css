@@ -15,6 +15,67 @@
   --virtus-danger: #ef4444;
 }
 
+/* Light theme */
+html.light {
+  --virtus-bg-primary: #f8fafc;
+  --virtus-bg-secondary: #ffffff;
+  --virtus-bg-card: #ffffff;
+  --virtus-border: #e2e8f0;
+  --virtus-accent: #E53935;
+  --virtus-accent-light: #FF5252;
+  --virtus-success: #10b981;
+  --virtus-danger: #ef4444;
+}
+
+html.light body {
+  background: var(--virtus-bg-primary);
+  color: #1a1a2e;
+}
+
+html.light .card,
+html.light .bg-virtus-bg-card {
+  background: var(--virtus-bg-card);
+  border-color: var(--virtus-border);
+  box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+}
+
+html.light .bg-virtus-bg-secondary {
+  background: var(--virtus-bg-secondary);
+}
+
+html.light .bg-virtus-bg-primary {
+  background: var(--virtus-bg-primary);
+}
+
+html.light .bg-virtus-bg-tertiary {
+  background: #f1f5f9;
+}
+
+html.light .border-virtus-border,
+html.light .border-virtus-border-primary {
+  border-color: #e2e8f0;
+}
+
+html.light .text-virtus-text-primary {
+  color: #1a1a2e;
+}
+
+html.light .text-virtus-text-secondary {
+  color: #475569;
+}
+
+html.light .text-virtus-text-muted {
+  color: #94a3b8;
+}
+
+html.light ::-webkit-scrollbar-track {
+  background: #f1f5f9;
+}
+
+html.light ::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+}
+
 * {
   box-sizing: border-box;
 }
@@ -397,6 +458,17 @@ body {
   }
 }
 
+@keyframes slideIn {
+  from { 
+    opacity: 0;
+    transform: translateX(100px);
+  }
+  to { 
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
 .animate-fadeIn {
   animation: fadeIn 0.2s ease-out;
 }
@@ -407,4 +479,8 @@ body {
 
 .animate-slideDown {
   animation: slideDown 0.3s ease-out;
+}
+
+.animate-slideIn {
+  animation: slideIn 0.3s ease-out;
 }

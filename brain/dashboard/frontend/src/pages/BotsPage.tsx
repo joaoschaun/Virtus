@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { botsAPI } from '../services/api'
 import { cn, getStatusBadge } from '../lib/utils'
+import ExternalBotsSection from '../components/ExternalBotsSection'
 import {
   Bot,
   Play,
@@ -39,9 +40,10 @@ export default function BotsPage() {
     setIsLoading(true)
     try {
       const response = await botsAPI.list()
-      setBots(response.data.bots)
+      setBots(response.data?.bots || [])
     } catch (error) {
       console.error('Failed to load bots:', error)
+      setBots([])
     } finally {
       setIsLoading(false)
     }
@@ -318,6 +320,15 @@ export default function BotsPage() {
           </div>
         </div>
       )}
+      
+      {/* External Bots Section */}
+      <div className="mt-8 pt-8 border-t-2 border-virtus-accent-primary">
+        <div className="mb-4 p-4 bg-virtus-accent-primary/20 rounded-lg">
+          <h2 className="text-xl font-bold text-virtus-accent-primary">🤖 BOTS EXTERNOS INTEGRADOS</h2>
+          <p className="text-sm text-virtus-text-muted">Bots de terceiros conectados via API</p>
+        </div>
+        <ExternalBotsSection />
+      </div>
     </div>
   )
 }

@@ -283,25 +283,64 @@ class BotOrchestrator:
     
     async def _create_bots(self) -> None:
         """Cria bots para cada símbolo configurado."""
-        for bot_config in self.config.bots:
+        self.logger.info("=" * 60)
+        self.logger.info("🤖 CRIAÇÃO DE BOTS INDEPENDENTES POR SÍMBOLO")
+        self.logger.info("=" * 60)
+        
+        all_bots = self.config.bots
+        self.logger.info(f"📊 Total de bots configurados: {len(all_bots)}")
+        
+        enabled_count = 0
+        disabled_count = 0
+        
+        for bot_config in all_bots:
+            self.logger.info("-" * 40)
+            self.logger.info(f"📊 Bot: {bot_config.id}")
+            self.logger.info(f"   Símbolo: {bot_config.symbol}")
+            self.logger.info(f"   Nome: {bot_config.name}")
+            self.logger.info(f"   Enabled: {bot_config.enabled}")
+            self.logger.info(f"   Priority: {bot_config.priority}")
+            
+            # Log das estratégias configuradas
+            strategies = bot_config.strategies.get('enabled', [])
+            if strategies:
+                self.logger.info(f"   Estratégias: {strategies}")
+            else:
+                # Tenta obter de outra forma
+                strat_list = []
+                for s in ['scalping', 'trend_following', 'breakout', 'range_trading', 'reversal', 'event']:
+                    if bot_config.strategies.get(s, {}).get('enabled', False):
+                        strat_list.append(s)
+                if strat_list:
+                    self.logger.info(f"   Estratégias: {strat_list}")
+            
             if not bot_config.enabled:
+                self.logger.warning(f"⏭️ Bot {bot_config.id} ({bot_config.symbol}) DESABILITADO - pulando...")
+                disabled_count += 1
                 continue
             
             try:
                 bot = create_bot(
                     symbol=bot_config.symbol,
                     config=self.config,
-                    strategy=None,  # Estratégia será definida depois
+                    strategy=None,  # TradingEngine usará estratégias do YAML
                 )
                 
                 await self.registry.register(bot, {
                     'config': bot_config.__dict__,
                 })
                 
-                self.logger.info(f"📊 Bot criado para {bot_config.symbol}")
+                self.logger.success(f"✅ Bot {bot_config.id} ({bot_config.symbol}) CRIADO com sucesso")
+                enabled_count += 1
                 
             except Exception as e:
-                self.logger.error(f"Erro ao criar bot para {bot_config.symbol}: {e}")
+                self.logger.error(f"❌ Erro ao criar bot para {bot_config.symbol}: {e}")
+                import traceback
+                self.logger.error(traceback.format_exc())
+        
+        self.logger.info("=" * 60)
+        self.logger.info(f"📊 RESUMO: {enabled_count} bots ativos, {disabled_count} desabilitados")
+        self.logger.info("=" * 60)
     
     async def start(self) -> None:
         """Inicia todos os bots."""

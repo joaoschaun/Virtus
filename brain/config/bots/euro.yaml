@@ -1,6 +1,8 @@
 # ============================================================
 # 💶 EURO BOT - Bot para EURUSD
 # ============================================================
+# NOTA: O enabled aqui pode ser sobrescrito pelo config.yaml principal
+# Para habilitar/desabilitar bots, prefira usar o config.yaml principal
 
 bot:
   id: "euro"
@@ -27,8 +29,8 @@ strategies:
       
     rsi:
       period: 14
-      oversold: 30
-      overbought: 70
+      oversold: 40  # Era 30 - mais oportunidades de compra
+      overbought: 60  # Era 70 - mais oportunidades de venda
       
     bollinger:
       period: 20

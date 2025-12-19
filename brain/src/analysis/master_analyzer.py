@@ -1008,6 +1008,39 @@ class MasterTechnicalAnalyzer:
             'alerts': result.alerts,
         }
 
+    def _calculate_rsi(self, close: np.ndarray, period: int = 14) -> float:
+        """Calcula RSI localmente."""
+        if len(close) < period + 1:
+            return 50.0
+        
+        deltas = np.diff(close)
+        gains = np.where(deltas > 0, deltas, 0)
+        losses = np.where(deltas < 0, -deltas, 0)
+        
+        avg_gain = np.mean(gains[-period:])
+        avg_loss = np.mean(losses[-period:])
+        
+        if avg_loss == 0:
+            return 100.0
+        
+        rs = avg_gain / avg_loss
+        rsi = 100 - (100 / (1 + rs))
+        return float(rsi)
+    
+    def _calculate_bollinger(self, close: np.ndarray, period: int = 20, std_dev: float = 2.0) -> Dict[str, float]:
+        """Calcula Bollinger Bands localmente."""
+        if len(close) < period:
+            return {'upper': 0, 'middle': 0, 'lower': 0}
+        
+        middle = np.mean(close[-period:])
+        std = np.std(close[-period:])
+        
+        return {
+            'upper': float(middle + std_dev * std),
+            'middle': float(middle),
+            'lower': float(middle - std_dev * std),
+        }
+
     async def analyze_full(self, market_data: Dict[str, Any]) -> Dict[str, Any]:
         """
         Análise completa a partir de market_data dict.
@@ -1045,6 +1078,26 @@ class MasterTechnicalAnalyzer:
             # Detecta símbolo (se disponível)
             symbol = market_data.get('symbol', 'UNKNOWN')
             
+            # === CALCULA INDICADORES LOCALMENTE ===
+            close = df['close'].values
+            
+            # RSI
+            rsi = self._calculate_rsi(close)
+            
+            # Bollinger Bands
+            bb = self._calculate_bollinger(close)
+            
+            # ATR para volatilidade
+            high = df['high'].values
+            low = df['low'].values
+            atr = np.mean(np.maximum.reduce([
+                high[-14:] - low[-14:],
+                np.abs(high[-14:] - np.roll(close, 1)[-14:]),
+                np.abs(low[-14:] - np.roll(close, 1)[-14:])
+            ]))
+            
+            self.logger.info(f"[{symbol}] Indicadores locais: RSI={rsi:.1f}, BB_upper={bb['upper']:.2f}, BB_lower={bb['lower']:.2f}, ATR={atr:.4f}")
+            
             # Executa análise
             result = self.analyze(
                 symbol=symbol,
@@ -1061,7 +1114,8 @@ class MasterTechnicalAnalyzer:
             trend_strength = result.trend_strength / 100  # Normaliza 0-1
             
             # Score final considera múltiplos fatores
-            score = (bias_score * 0.4 + trend_strength * 0.3 + 0.3)  # Base 0.3
+            # AJUSTADO: Base aumentada para 0.4 para gerar mais sinais
+            score = (bias_score * 0.3 + trend_strength * 0.2 + 0.5)  # Base 0.5
             
             # Ajusta por setup se houver
             if result.current_setup:
@@ -1087,7 +1141,20 @@ class MasterTechnicalAnalyzer:
             
             analysis_dict['volatility'] = {
                 'level': volatility_level,
+                'atr': float(atr),
             }
+            
+            # === ADICIONA INDICADORES CALCULADOS LOCALMENTE ===
+            # Estes indicadores são usados pelas estratégias (scalping, trend, reversal)
+            analysis_dict['indicators'] = {
+                'rsi': rsi,
+                'bb_upper': bb['upper'],
+                'bb_lower': bb['lower'],
+                'bb_middle': bb['middle'],
+                'atr': float(atr),
+            }
+            
+            self.logger.info(f"[{symbol}] analyze_full score={analysis_dict['score']:.2f}, RSI={rsi:.1f}")
             
             return analysis_dict
             

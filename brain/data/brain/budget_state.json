@@ -1,26 +1,26 @@
 {
   "forexnews": {
-    "daily_usage": 24,
-    "monthly_usage": 24,
-    "daily_reset": "2025-12-14T13:15:52.070816",
+    "daily_usage": 37,
+    "monthly_usage": 262,
+    "daily_reset": "2025-12-19T00:00:00",
     "monthly_reset": "2025-12-14T13:15:52.070816"
   },
   "finnhub": {
-    "daily_usage": 16,
-    "monthly_usage": 16,
-    "daily_reset": "2025-12-14T13:15:52.070816",
+    "daily_usage": 17,
+    "monthly_usage": 149,
+    "daily_reset": "2025-12-19T00:00:00",
     "monthly_reset": "2025-12-14T13:15:52.070816"
   },
   "twelvedata": {
-    "daily_usage": 23,
-    "monthly_usage": 23,
-    "daily_reset": "2025-12-14T13:15:52.070816",
+    "daily_usage": 7,
+    "monthly_usage": 111,
+    "daily_reset": "2025-12-19T00:00:00",
     "monthly_reset": "2025-12-14T13:15:52.070816"
   },
   "fmp": {
     "daily_usage": 0,
     "monthly_usage": 0,
-    "daily_reset": "2025-12-14T13:15:52.070816",
+    "daily_reset": "2025-12-19T00:00:00",
     "monthly_reset": "2025-12-14T13:15:52.070816"
   },
   "finazon": {

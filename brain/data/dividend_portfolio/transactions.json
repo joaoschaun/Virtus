@@ -1,0 +1,98 @@
+[
+  {
+    "id": "f4b49d63",
+    "ticker": "EGIE3",
+    "type": "buy",
+    "date": "2025-12-18",
+    "shares": 100,
+    "price": 30.7,
+    "total": 3075.5,
+    "fees": 5.5,
+    "notes": "",
+    "created_at": "2025-12-18T12:47:13.211201"
+  },
+  {
+    "id": "16c3f34f",
+    "ticker": "BBDC4",
+    "type": "buy",
+    "date": "2025-12-18",
+    "shares": 200,
+    "price": 18.35,
+    "total": 3675.5000000000005,
+    "fees": 5.5,
+    "notes": "",
+    "created_at": "2025-12-18T12:47:13.544974"
+  },
+  {
+    "id": "69aeda22",
+    "ticker": "ITUB4",
+    "type": "buy",
+    "date": "2025-12-15",
+    "shares": 100,
+    "price": 39.1,
+    "total": 3915.5,
+    "fees": 5.5,
+    "notes": "",
+    "created_at": "2025-12-18T12:47:13.979103"
+  },
+  {
+    "id": "6dd67f45",
+    "ticker": "TAEE11",
+    "type": "buy",
+    "date": "2025-12-10",
+    "shares": 50,
+    "price": 40.2,
+    "total": 2015.5000000000002,
+    "fees": 5.5,
+    "notes": "",
+    "created_at": "2025-12-18T12:47:14.486694"
+  },
+  {
+    "id": "069bf67e",
+    "ticker": "EGIE3",
+    "type": "buy",
+    "date": "2025-12-18",
+    "shares": 100,
+    "price": 30.7,
+    "total": 3075.5,
+    "fees": 5.5,
+    "notes": "",
+    "created_at": "2025-12-18T12:47:17.956606"
+  },
+  {
+    "id": "e89a564d",
+    "ticker": "BBDC4",
+    "type": "buy",
+    "date": "2025-12-18",
+    "shares": 200,
+    "price": 18.35,
+    "total": 3675.5000000000005,
+    "fees": 5.5,
+    "notes": "",
+    "created_at": "2025-12-18T12:47:22.683692"
+  },
+  {
+    "id": "33dd0666",
+    "ticker": "ITUB4",
+    "type": "buy",
+    "date": "2025-12-15",
+    "shares": 100,
+    "price": 39.1,
+    "total": 3915.5,
+    "fees": 5.5,
+    "notes": "",
+    "created_at": "2025-12-18T12:47:28.733512"
+  },
+  {
+    "id": "e29866a0",
+    "ticker": "TAEE11",
+    "type": "buy",
+    "date": "2025-12-10",
+    "shares": 50,
+    "price": 40.2,
+    "total": 2015.5000000000002,
+    "fees": 5.5,
+    "notes": "",
+    "created_at": "2025-12-18T12:47:28.798003"
+  }
+]

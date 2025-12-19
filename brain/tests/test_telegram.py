@@ -6,9 +6,10 @@ Teste de Conexão Telegram
 import asyncio
 import aiohttp
 import ssl
+import os
 
-TELEGRAM_TOKEN = "8334321679:AAHZI9cFlflEigDR4ZlkZ68YWiPNPIhoEdc"
-TELEGRAM_CHAT_ID = "7005082427"
+TELEGRAM_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
+TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "")
 
 async def test_telegram():
     print("=" * 50)

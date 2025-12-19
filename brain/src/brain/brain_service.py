@@ -27,7 +27,8 @@ from .providers import (
     FinnhubProvider,
     TwelveDataProvider,
     FMPProvider,
-    CFTCProvider
+    CFTCProvider,
+    EODHDProvider
 )
 
 logger = get_logger("brain")
@@ -63,6 +64,7 @@ class BrainService:
         self._twelvedata: Optional[TwelveDataProvider] = None
         self._fmp: Optional[FMPProvider] = None
         self._cftc: Optional[CFTCProvider] = None
+        self._eodhd: Optional[EODHDProvider] = None
         
         # Status
         self._initialized = False
@@ -113,6 +115,15 @@ class BrainService:
         """Inicializa todos os providers"""
         api_keys = self.config.api_keys
         
+        # EODHD (principal para dados de mercado e news)
+        if api_keys.eodhd:
+            self._eodhd = EODHDProvider(
+                api_key=api_keys.eodhd,
+                cache_manager=self.cache_manager,
+                budget_manager=self.budget_manager
+            )
+            logger.debug("Provider EODHD inicializado")
+        
         # ForexNews (principal para notícias)
         if api_keys.forexnews:
             self._forexnews = ForexNewsProvider(
@@ -154,8 +165,9 @@ class BrainService:
         logger.debug("Provider CFTC inicializado (gratuito)")
     
     async def _check_providers_health(self):
-        """Verifica status de saúde dos providers"""
+        """Verifica status de saúde dos providers (não-bloqueante)"""
         providers = [
+            ('eodhd', self._eodhd),
             ('cftc', self._cftc),
             ('forexnews', self._forexnews),
             ('finnhub', self._finnhub),
@@ -163,22 +175,46 @@ class BrainService:
             ('fmp', self._fmp),
         ]
         
-        for name, provider in providers:
-            if provider:
-                try:
-                    status = await asyncio.wait_for(
-                        provider.health_check(),
-                        timeout=10
-                    )
+        # Executa health checks em paralelo com timeout curto
+        async def check_provider(name: str, provider) -> tuple:
+            if not provider:
+                return (name, None)
+            try:
+                status = await asyncio.wait_for(
+                    provider.health_check(),
+                    timeout=5  # Timeout reduzido
+                )
+                return (name, status)
+            except asyncio.TimeoutError:
+                return (name, False)
+            except asyncio.CancelledError:
+                return (name, False)
+            except Exception as e:
+                logger.debug(f"Provider {name} error: {e}")
+                return (name, False)
+        
+        # Executa todos em paralelo
+        tasks = [check_provider(name, p) for name, p in providers]
+        try:
+            results = await asyncio.wait_for(
+                asyncio.gather(*tasks, return_exceptions=True),
+                timeout=15  # Timeout total para todos
+            )
+        except asyncio.TimeoutError:
+            logger.warning("⏱️ Timeout geral no health check dos providers")
+            results = [(name, False) for name, _ in providers]
+        except asyncio.CancelledError:
+            logger.warning("⚠️ Health check cancelado")
+            results = [(name, False) for name, _ in providers]
+        
+        # Processa resultados
+        for result in results:
+            if isinstance(result, tuple) and len(result) == 2:
+                name, status = result
+                if name and status is not None:
                     self._provider_status[name] = status
                     emoji = "✅" if status else "❌"
                     logger.info(f"{emoji} Provider {name}: {'OK' if status else 'FALHA'}")
-                except asyncio.TimeoutError:
-                    self._provider_status[name] = False
-                    logger.warning(f"⏱️ Provider {name}: timeout")
-                except Exception as e:
-                    self._provider_status[name] = False
-                    logger.warning(f"❌ Provider {name}: {e}")
     
     async def _on_budget_alert(self, level: str, provider: str, message: str):
         """Callback para alertas de budget"""
@@ -214,7 +250,20 @@ class BrainService:
         
         all_news = []
         
-        # ForexNews (principal)
+        # EODHD (principal - dados mais completos)
+        if self._eodhd and self._provider_status.get('eodhd'):
+            try:
+                eodhd_symbols = None
+                if symbols:
+                    # Converte para formato EODHD (ex: XAUUSD -> XAUUSD.FOREX)
+                    eodhd_symbols = [f"{s}.FOREX" for s in symbols]
+                news = await self._eodhd.get_formatted_news(eodhd_symbols, limit * 2)
+                all_news.extend(news)
+                logger.debug(f"EODHD: {len(news)} notícias obtidas")
+            except Exception as e:
+                logger.warning(f"Erro EODHD News: {e}")
+        
+        # ForexNews (backup)
         if self._forexnews and self._provider_status.get('forexnews'):
             try:
                 news = await self._forexnews.get_news(symbols, limit * 2, hours_back)
@@ -274,7 +323,17 @@ class BrainService:
         Calcula sentimento agregado para um símbolo.
         
         Args:
-            symbol: Símbolo (ex: 'XAUUSD')
+          EODHD sentiment (principal)
+        if self._eodhd and self._provider_status.get('eodhd'):
+            try:
+                eodhd_symbol = f"{symbol}.FOREX"
+                sent = await self._eodhd.get_market_sentiment(eodhd_symbol)
+                if sent:
+                    sentiments.append(sent)
+            except Exception as e:
+                logger.warning(f"Erro sentimento EODHD: {e}")
+        
+        # ForexNews sentiment (backup)ex: 'XAUUSD')
             
         Returns:
             MarketSentiment com scores agregados
@@ -629,11 +688,277 @@ class BrainService:
         logger.info("🧠 Encerrando Brain Service...")
         
         # Fecha providers
-        for provider in [self._forexnews, self._finnhub, self._twelvedata, self._fmp]:
+        for provider in [self._eodhd, self._forexnews, self._finnhub, self._twelvedata, self._fmp]:
             if provider:
                 await provider.close()
         
         logger.info("✅ Brain Service encerrado")
+    
+    # ========================================================================
+    # EODHD - MÉTODOS ESPECÍFICOS
+    # ========================================================================
+    
+    async def get_market_data(
+        self,
+        symbol: str,
+        data_type: str = "eod",
+        from_date: Optional[datetime] = None,
+        to_date: Optional[datetime] = None
+    ) -> List[Dict[str, Any]]:
+        """
+        Obtém dados de mercado via EODHD.
+        
+        Args:
+            symbol: Símbolo (ex: XAUUSD, EURUSD)
+            data_type: 'eod', 'intraday', 'live'
+            from_date: Data inicial
+            to_date: Data final
+            
+        Returns:
+            Lista de candles
+        """
+        if not self._eodhd:
+            raise ProviderUnavailableError("EODHD provider not available")
+        
+        # Mapeia símbolo para formato EODHD
+        eodhd_symbol = self._map_symbol_to_eodhd(symbol)
+        
+        if data_type == "eod":
+            return await self._eodhd.get_eod_data(eodhd_symbol, from_date, to_date)
+        elif data_type == "intraday":
+            return await self._eodhd.get_intraday_data(eodhd_symbol)
+        elif data_type == "live":
+            return [await self._eodhd.get_live_price(eodhd_symbol)]
+        else:
+            raise ValueError(f"Invalid data_type: {data_type}")
+    
+    async def get_technical_indicators(
+        self,
+        symbol: str,
+        indicators: List[str] = None,
+        period: int = 14
+    ) -> Dict[str, List[Dict[str, Any]]]:
+        """
+        Obtém indicadores técnicos via EODHD.
+        
+        Args:
+            symbol: Símbolo
+            indicators: Lista de indicadores (sma, ema, rsi, macd, bbands, etc)
+            period: Período
+            
+        Returns:
+            Dict com dados de cada indicador
+        """
+        if not self._eodhd:
+            raise ProviderUnavailableError("EODHD provider not available")
+        
+        indicators = indicators or ['sma', 'ema', 'rsi', 'macd']
+        eodhd_symbol = self._map_symbol_to_eodhd(symbol)
+        
+        results = {}
+        for indicator in indicators:
+            try:
+                data = await self._eodhd.get_technical_indicator(
+                    eodhd_symbol, indicator, period
+                )
+                results[indicator] = data
+            except Exception as e:
+                logger.warning(f"Erro ao obter {indicator}: {e}")
+                results[indicator] = []
+        
+        return results
+    
+    async def get_economic_calendar_enhanced(
+        self,
+        countries: List[str] = None,
+        from_date: Optional[datetime] = None,
+        to_date: Optional[datetime] = None
+    ) -> Dict[str, Any]:
+        """
+        Obtém calendário econômico completo via EODHD.
+        
+        Args:
+            countries: Lista de países (US, GB, EU, BR, etc)
+            from_date: Data inicial
+            to_date: Data final
+            
+        Returns:
+            Dict com eventos, earnings e IPOs
+        """
+        if not self._eodhd:
+            raise ProviderUnavailableError("EODHD provider not available")
+        
+        countries = countries or ['US', 'GB', 'EU']
+        from_date = from_date or datetime.now()
+        to_date = to_date or datetime.now() + timedelta(days=7)
+        
+        result = {
+            'economic_events': [],
+            'earnings': [],
+            'ipos': []
+        }
+        
+        try:
+            # Eventos econômicos
+            for country in countries:
+                events = await self._eodhd.get_economic_events(
+                    from_date, to_date, country
+                )
+                result['economic_events'].extend(events)
+        except Exception as e:
+            logger.warning(f"Erro ao obter eventos econômicos: {e}")
+        
+        try:
+            # Calendário de earnings
+            result['earnings'] = await self._eodhd.get_earnings_calendar(
+                from_date, to_date
+            )
+        except Exception as e:
+            logger.warning(f"Erro ao obter earnings: {e}")
+        
+        try:
+            # IPOs
+            result['ipos'] = await self._eodhd.get_ipos_calendar(
+                from_date, to_date
+            )
+        except Exception as e:
+            logger.warning(f"Erro ao obter IPOs: {e}")
+        
+        return result
+    
+    async def get_fundamentals(
+        self,
+        symbol: str,
+        filter_field: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """
+        Obtém dados fundamentalistas via EODHD.
+        
+        Args:
+            symbol: Símbolo (ex: AAPL, MSFT)
+            filter_field: Campo específico (General, Highlights, Valuation)
+            
+        Returns:
+            Dict com dados fundamentalistas
+        """
+        if not self._eodhd:
+            raise ProviderUnavailableError("EODHD provider not available")
+        
+        # Para ações, usa formato SYMBOL.US
+        if '.' not in symbol:
+            symbol = f"{symbol}.US"
+        
+        return await self._eodhd.get_fundamentals(symbol, filter_field)
+    
+    async def get_macro_data(
+        self,
+        country: str = "USA",
+        indicators: List[str] = None
+    ) -> Dict[str, List[Dict[str, Any]]]:
+        """
+        Obtém dados macroeconômicos via EODHD.
+        
+        Args:
+            country: Código do país (USA, BRA, GBR, etc)
+            indicators: Lista de indicadores
+            
+        Returns:
+            Dict com dados macro
+        """
+        if not self._eodhd:
+            raise ProviderUnavailableError("EODHD provider not available")
+        
+        indicators = indicators or [
+            'gdp_growth_annual',
+            'inflation_consumer_prices_annual',
+            'unemployment_rate',
+            'real_interest_rate'
+        ]
+        
+        results = {}
+        for indicator in indicators:
+            try:
+                data = await self._eodhd.get_macro_indicator(country, indicator)
+                results[indicator] = data
+            except Exception as e:
+                logger.warning(f"Erro ao obter {indicator}: {e}")
+                results[indicator] = []
+        
+        return results
+    
+    async def get_forex_data(
+        self,
+        pair: str,
+        data_type: str = "live"
+    ) -> Dict[str, Any]:
+        """
+        Obtém dados forex via EODHD.
+        
+        Args:
+            pair: Par forex (EURUSD, GBPUSD, XAUUSD)
+            data_type: 'live', 'eod', 'intraday'
+            
+        Returns:
+            Dict com dados forex
+        """
+        if not self._eodhd:
+            raise ProviderUnavailableError("EODHD provider not available")
+        
+        if data_type == "live":
+            return await self._eodhd.get_forex_rate(pair)
+        elif data_type == "eod":
+            return await self._eodhd.get_forex_eod(pair)
+        elif data_type == "intraday":
+            return await self._eodhd.get_forex_intraday(pair)
+        else:
+            raise ValueError(f"Invalid data_type: {data_type}")
+    
+    async def get_crypto_data(
+        self,
+        symbol: str
+    ) -> Dict[str, Any]:
+        """
+        Obtém dados de criptomoeda via EODHD.
+        
+        Args:
+            symbol: Símbolo (BTC-USD, ETH-USD)
+            
+        Returns:
+            Dict com dados da cripto
+        """
+        if not self._eodhd:
+            raise ProviderUnavailableError("EODHD provider not available")
+        
+        return await self._eodhd.get_crypto_price(symbol)
+    
+    def _map_symbol_to_eodhd(self, symbol: str) -> str:
+        """
+        Mapeia símbolo Virtus para formato EODHD.
+        
+        Ex: XAUUSD -> XAUUSD.FOREX
+            AAPL -> AAPL.US
+            BTC-USD -> BTC-USD.CC
+        """
+        if '.' in symbol:
+            return symbol
+        
+        # Forex pairs
+        forex_symbols = [
+            'XAUUSD', 'EURUSD', 'GBPUSD', 'USDJPY', 
+            'AUDUSD', 'USDCAD', 'USDCHF', 'NZDUSD',
+            'XAGUSD', 'XAUEUR'
+        ]
+        
+        if symbol.upper() in forex_symbols:
+            return f"{symbol}.FOREX"
+        
+        # Crypto
+        crypto_symbols = ['BTC-USD', 'ETH-USD', 'XRP-USD']
+        if symbol.upper() in crypto_symbols or '-USD' in symbol.upper():
+            return f"{symbol}.CC"
+        
+        # Default to US stocks
+        return f"{symbol}.US"
 
 
 # Função helper para obter instância

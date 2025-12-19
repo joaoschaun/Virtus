@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 500 100">
+  <!-- Logo Virtus Investimentos -->
+  
+  <!-- "virtus" text com estilo moderno -->
+  <g transform="translate(10, 15)">
+    <!-- v -->
+    <path d="M0 0 L0 8 L22 70 L28 70 L50 8 L50 0 L42 0 L25 55 L8 0 Z" fill="#FFFFFF"/>
+    
+    <!-- i com quadrado vermelho -->
+    <rect x="60" y="0" width="14" height="14" fill="#E53935"/>
+    <rect x="60" y="22" width="14" height="48" fill="#FFFFFF"/>
+    
+    <!-- r -->
+    <path d="M90 22 L90 70 L104 70 L104 40 C104 32 112 28 122 28 L122 18 C108 18 98 24 90 22 Z" fill="#FFFFFF"/>
+    
+    <!-- t -->
+    <path d="M135 8 L135 22 L125 22 L125 32 L135 32 L135 58 C135 66 142 72 154 70 L154 60 C148 60 147 58 147 54 L147 32 L158 32 L158 22 L147 22 L147 8 Z" fill="#FFFFFF"/>
+    
+    <!-- u -->
+    <path d="M168 22 L168 52 C168 62 176 72 194 72 C212 72 220 62 220 52 L220 22 L206 22 L206 50 C206 56 202 60 194 60 C186 60 182 56 182 50 L182 22 Z" fill="#FFFFFF"/>
+    
+    <!-- s -->
+    <path d="M235 22 C250 22 262 28 262 40 C262 50 252 54 242 56 L232 58 C228 59 226 61 226 64 C226 68 230 70 238 70 C248 70 256 66 260 62 L268 72 C262 78 250 82 238 82 C220 82 212 74 212 64 C212 54 222 50 232 48 L242 46 C248 45 250 43 250 40 C250 36 246 34 238 34 C230 34 222 38 218 42 L210 32 C218 26 228 22 238 22 Z" fill="#FFFFFF"/>
+  </g>
+  
+  <!-- INVESTIMENTOS -->
+  <text x="300" y="55" font-family="Arial, Helvetica, sans-serif" font-size="16" letter-spacing="6" fill="#888888" font-weight="300">INVESTIMENTOS</text>
+</svg>

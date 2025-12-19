@@ -205,3 +205,133 @@ async def list_categories():
             {"value": "stocks", "label": "Ações", "icon": "📈"},
         ]
     }
+
+
+@router.get("/social/feed")
+async def get_social_feed(
+    limit: int = Query(5, ge=1, le=20, description="Número de notícias para social"),
+):
+    """
+    Retorna notícias formatadas para publicação em redes sociais.
+    
+    Inclui:
+    - Texto formatado para Twitter/Instagram
+    - Hashtags relevantes
+    - Emojis contextuais
+    - URL do áudio
+    """
+    try:
+        # Busca notícias de alta prioridade
+        news_items = await news_service.fetch_news(limit=limit)
+        
+        social_posts = []
+        for news in news_items:
+            # Formata para redes sociais
+            emoji = "📈" if news.sentiment == "bullish" else "📉" if news.sentiment == "bearish" else "📊"
+            
+            # Gera hashtags baseado nos símbolos
+            hashtags = ["#Trading", "#Mercado"]
+            for symbol in news.related_symbols:
+                hashtags.append(f"#{symbol}")
+            if news.category.value == "forex":
+                hashtags.append("#Forex")
+            elif news.category.value == "commodities":
+                hashtags.append("#Ouro")
+            elif news.category.value == "economy":
+                hashtags.append("#Economia")
+            
+            # Texto para Twitter (max 280 chars)
+            twitter_text = f"{emoji} {news.title}\n\n{news.summary[:150]}...\n\n{' '.join(hashtags[:5])}"
+            if len(twitter_text) > 280:
+                twitter_text = twitter_text[:277] + "..."
+            
+            # Texto para Instagram (pode ser mais longo)
+            instagram_text = f"{emoji} {news.title}\n\n{news.summary}\n\n{' '.join(hashtags)}\n\n🔊 Ouça em áudio em português!"
+            
+            social_posts.append({
+                "news_id": news.id,
+                "title": news.title,
+                "twitter_text": twitter_text,
+                "instagram_text": instagram_text,
+                "hashtags": hashtags,
+                "sentiment": news.sentiment,
+                "priority": news.priority.value,
+                "audio_url": news.audio_url,
+                "audio_duration": news.audio_duration_seconds,
+                "symbols": news.related_symbols,
+                "category": news.category.value,
+                "published_at": news.published_at.isoformat(),
+            })
+        
+        return {
+            "posts": social_posts,
+            "total": len(social_posts),
+            "generated_at": datetime.now().isoformat(),
+        }
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Erro ao gerar feed social: {str(e)}")
+
+
+@router.get("/briefing/morning")
+async def get_morning_briefing():
+    """
+    Retorna briefing matinal com resumo das principais notícias.
+    
+    Ideal para:
+    - Post automático nas redes sociais
+    - Áudio de abertura do mercado
+    - Newsletter diária
+    """
+    try:
+        # Busca notícias de todas as categorias
+        news_items = await news_service.fetch_news(limit=10)
+        
+        # Agrupa por categoria
+        by_category = {}
+        for news in news_items:
+            cat = news.category.value
+            if cat not in by_category:
+                by_category[cat] = []
+            by_category[cat].append(news)
+        
+        # Gera texto do briefing
+        briefing_text = "🌅 BOM DIA, TRADER!\n\n"
+        briefing_text += f"📅 {datetime.now().strftime('%d/%m/%Y - %A')}\n\n"
+        briefing_text += "📰 PRINCIPAIS NOTÍCIAS:\n\n"
+        
+        for i, news in enumerate(news_items[:5], 1):
+            emoji = "📈" if news.sentiment == "bullish" else "📉" if news.sentiment == "bearish" else "📊"
+            briefing_text += f"{i}. {emoji} {news.title}\n"
+        
+        briefing_text += "\n💡 Mantenha-se informado e opere com sabedoria!\n"
+        briefing_text += "#Trading #MercadoFinanceiro #BomDiaTrader"
+        
+        # Gera áudio do briefing
+        audio_path = await news_service.tts.text_to_speech(
+            f"Bom dia, trader! Hoje é {datetime.now().strftime('%d de %B de %Y')}. "
+            + "Aqui estão as principais notícias do mercado. "
+            + " ".join([f"{n.title}. " for n in news_items[:5]])
+            + "Mantenha-se informado e opere com sabedoria!"
+        )
+        
+        audio_url = f"/api/news/audio/{audio_path.name}" if audio_path else None
+        
+        return {
+            "date": datetime.now().isoformat(),
+            "text": briefing_text,
+            "audio_url": audio_url,
+            "news_count": len(news_items),
+            "by_category": {k: len(v) for k, v in by_category.items()},
+            "top_news": [
+                {
+                    "title": n.title,
+                    "sentiment": n.sentiment,
+                    "symbols": n.related_symbols,
+                }
+                for n in news_items[:5]
+            ],
+        }
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Erro ao gerar briefing: {str(e)}")

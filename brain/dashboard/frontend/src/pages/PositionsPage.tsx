@@ -53,11 +53,14 @@ export default function PositionsPage() {
         ordersAPI.list(),
       ])
       
-      setPositions(posRes.data.positions)
-      setTotalProfit(posRes.data.total_profit)
-      setOrders(ordRes.data.orders)
+      setPositions(posRes.data?.positions || [])
+      setTotalProfit(posRes.data?.total_profit || 0)
+      setOrders(ordRes.data?.orders || [])
     } catch (error) {
       console.error('Failed to load data:', error)
+      setPositions([])
+      setOrders([])
+      setTotalProfit(0)
     } finally {
       setIsLoading(false)
     }

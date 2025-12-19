@@ -17,9 +17,11 @@ import {
   X,
   Zap,
   Sparkles,
-  Clock
+  Clock,
+  ListFilter,
+  Globe
 } from 'lucide-react';
-import { socialService, Post, MarketAlertRequest, NewsPostRequest } from '../services/socialService';
+import { socialService, Post, MarketAlertRequest, NewsPostRequest, NewsItem } from '../services/socialService';
 
 const SocialMedia: React.FC = () => {
   const [posts, setPosts] = useState<Post[]>([]);
@@ -30,6 +32,12 @@ const SocialMedia: React.FC = () => {
   const [showModal, setShowModal] = useState<string | null>(null);
   const [selectedPost, setSelectedPost] = useState<Post | null>(null);
   const [pendingCount, setPendingCount] = useState(0);
+  
+  // News selection states
+  const [availableNews, setAvailableNews] = useState<NewsItem[]>([]);
+  const [loadingNews, setLoadingNews] = useState(false);
+  const [selectedNews, setSelectedNews] = useState<NewsItem | null>(null);
+  const [newsFilter, setNewsFilter] = useState<'all' | 'brazil' | 'forex'>('all');
   
   // Form states
   const [alertForm, setAlertForm] = useState<MarketAlertRequest>({
@@ -67,6 +75,64 @@ const SocialMedia: React.FC = () => {
       setPendingCount(data.count || 0);
     } catch (error) {
       console.error('Erro ao carregar pendentes:', error);
+    }
+  };
+
+  // =============================================
+  // SELEÇÃO DE NOTÍCIAS - Carrega notícias disponíveis
+  // =============================================
+  const loadAvailableNews = async (filter: 'all' | 'brazil' | 'forex' = 'all') => {
+    try {
+      setLoadingNews(true);
+      setNewsFilter(filter);
+      
+      let data;
+      if (filter === 'brazil') {
+        data = await socialService.getBrazilNews(15);
+      } else {
+        data = await socialService.getAllNews(20);
+      }
+      
+      // Filtra se necessário
+      let news = data.news || [];
+      if (filter === 'forex') {
+        news = news.filter(n => n.category === 'forex');
+      }
+      
+      setAvailableNews(news);
+    } catch (error) {
+      console.error('Erro ao carregar notícias:', error);
+      setAvailableNews([]);
+    } finally {
+      setLoadingNews(false);
+    }
+  };
+
+  const generateFromSelectedNews = async (news: NewsItem) => {
+    try {
+      setGenerating(true);
+      setShowModal(null);
+      
+      const result = await socialService.generateFromSelectedNews({
+        title: news.title,
+        summary: news.summary,
+        sentiment: news.sentiment || 'neutral',
+        category: news.category,
+        tickers: news.tickers || [],
+        source: news.source
+      });
+      
+      if (result.success) {
+        alert('✅ Post gerado com sucesso!\n\nBaixe a imagem e poste no Instagram.');
+        loadPosts();
+        loadPendingCount();
+      }
+    } catch (error: any) {
+      console.error('Erro ao gerar post:', error);
+      alert('Erro ao gerar post: ' + (error.response?.data?.detail || error.message));
+    } finally {
+      setGenerating(false);
+      setSelectedNews(null);
     }
   };
 
@@ -258,23 +324,39 @@ const SocialMedia: React.FC = () => {
             </div>
           </div>
           
-          <button
-            onClick={autoGenerateFromNews}
-            disabled={autoGenerating}
-            className="px-6 py-3 bg-red-600 hover:bg-red-500 disabled:bg-red-800 rounded-xl text-white font-bold flex items-center gap-2 transition-all transform hover:scale-105"
-          >
-            {autoGenerating ? (
-              <>
-                <RefreshCw className="w-5 h-5 animate-spin" />
-                Gerando...
-              </>
-            ) : (
-              <>
-                <Sparkles className="w-5 h-5" />
-                Gerar das Notícias
-              </>
-            )}
-          </button>
+          <div className="flex gap-3">
+            {/* Botão para selecionar notícia */}
+            <button
+              onClick={() => {
+                setShowModal('select_news');
+                loadAvailableNews('all');
+              }}
+              disabled={generating}
+              className="px-5 py-3 bg-blue-600 hover:bg-blue-500 disabled:bg-blue-800 rounded-xl text-white font-bold flex items-center gap-2 transition-all"
+            >
+              <ListFilter className="w-5 h-5" />
+              Escolher Notícia
+            </button>
+            
+            {/* Botão automático */}
+            <button
+              onClick={autoGenerateFromNews}
+              disabled={autoGenerating}
+              className="px-6 py-3 bg-red-600 hover:bg-red-500 disabled:bg-red-800 rounded-xl text-white font-bold flex items-center gap-2 transition-all transform hover:scale-105"
+            >
+              {autoGenerating ? (
+                <>
+                  <RefreshCw className="w-5 h-5 animate-spin" />
+                  Gerando...
+                </>
+              ) : (
+                <>
+                  <Sparkles className="w-5 h-5" />
+                  Gerar Automático
+                </>
+              )}
+            </button>
+          </div>
         </div>
         
         <div className="mt-4 p-3 bg-black/30 rounded-lg text-sm text-gray-300">
@@ -626,6 +708,165 @@ const SocialMedia: React.FC = () => {
                 className="flex-1 px-4 py-2 bg-red-600 hover:bg-red-500 rounded-lg text-white disabled:opacity-50"
               >
                 {generating ? 'Gerando...' : 'Gerar Post'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Select News */}
+      {showModal === 'select_news' && (
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
+          <div className="bg-gray-800 rounded-xl p-6 w-full max-w-4xl max-h-[90vh] flex flex-col">
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <h2 className="text-xl font-bold text-white">📰 Escolher Notícia para Post</h2>
+                <p className="text-gray-400 text-sm">Selecione uma notícia para criar o post</p>
+              </div>
+              <button onClick={() => setShowModal(null)} className="text-gray-400 hover:text-white">
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+            
+            {/* Filtros */}
+            <div className="flex gap-2 mb-4">
+              <button
+                onClick={() => loadAvailableNews('all')}
+                className={`px-4 py-2 rounded-lg flex items-center gap-2 ${
+                  newsFilter === 'all' 
+                    ? 'bg-red-600 text-white' 
+                    : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                }`}
+              >
+                <Globe className="w-4 h-4" />
+                Todas
+              </button>
+              <button
+                onClick={() => loadAvailableNews('brazil')}
+                className={`px-4 py-2 rounded-lg flex items-center gap-2 ${
+                  newsFilter === 'brazil' 
+                    ? 'bg-green-600 text-white' 
+                    : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                }`}
+              >
+                🇧🇷 Ações Brasil
+              </button>
+              <button
+                onClick={() => loadAvailableNews('forex')}
+                className={`px-4 py-2 rounded-lg flex items-center gap-2 ${
+                  newsFilter === 'forex' 
+                    ? 'bg-blue-600 text-white' 
+                    : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                }`}
+              >
+                💱 Forex
+              </button>
+              
+              <button
+                onClick={() => loadAvailableNews(newsFilter)}
+                className="ml-auto px-3 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg text-gray-300"
+              >
+                <RefreshCw className={`w-4 h-4 ${loadingNews ? 'animate-spin' : ''}`} />
+              </button>
+            </div>
+            
+            {/* Lista de notícias */}
+            <div className="flex-1 overflow-y-auto space-y-3 pr-2">
+              {loadingNews ? (
+                <div className="text-center py-12 text-gray-400">
+                  <RefreshCw className="w-8 h-8 animate-spin mx-auto mb-2" />
+                  Carregando notícias...
+                </div>
+              ) : availableNews.length === 0 ? (
+                <div className="text-center py-12 text-gray-400">
+                  <Newspaper className="w-12 h-12 mx-auto mb-2 opacity-50" />
+                  <p>Nenhuma notícia disponível</p>
+                </div>
+              ) : (
+                availableNews.map((news, index) => (
+                  <div
+                    key={news.id || index}
+                    className={`p-4 rounded-xl border cursor-pointer transition-all ${
+                      selectedNews?.id === news.id
+                        ? 'bg-red-900/30 border-red-500'
+                        : 'bg-gray-700/50 border-gray-600 hover:border-gray-500'
+                    }`}
+                    onClick={() => setSelectedNews(news)}
+                  >
+                    <div className="flex items-start gap-3">
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2 mb-1">
+                          <span className={`text-xs px-2 py-0.5 rounded ${
+                            news.category === 'stocks_br' 
+                              ? 'bg-green-600/30 text-green-400'
+                              : 'bg-blue-600/30 text-blue-400'
+                          }`}>
+                            {news.category === 'stocks_br' ? '🇧🇷 Brasil' : '💱 Forex'}
+                          </span>
+                          <span className={`text-xs px-2 py-0.5 rounded ${
+                            news.sentiment === 'bullish' 
+                              ? 'bg-green-600/30 text-green-400'
+                              : news.sentiment === 'bearish'
+                              ? 'bg-red-600/30 text-red-400'
+                              : 'bg-gray-600/30 text-gray-400'
+                          }`}>
+                            {news.sentiment === 'bullish' ? '📈 Alta' : news.sentiment === 'bearish' ? '📉 Baixa' : '➡️ Neutro'}
+                          </span>
+                          <span className="text-xs text-gray-500">{news.source}</span>
+                        </div>
+                        
+                        <h3 className="text-white font-medium mb-1">{news.title}</h3>
+                        <p className="text-gray-400 text-sm line-clamp-2">{news.summary}</p>
+                        
+                        {news.tickers && news.tickers.length > 0 && (
+                          <div className="flex gap-1 mt-2">
+                            {news.tickers.slice(0, 5).map((ticker) => (
+                              <span key={ticker} className="text-xs bg-gray-600 px-2 py-0.5 rounded text-gray-300">
+                                {ticker}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                      
+                      {selectedNews?.id === news.id && (
+                        <div className="w-6 h-6 bg-red-600 rounded-full flex items-center justify-center">
+                          <Check className="w-4 h-4 text-white" />
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+            
+            {/* Footer */}
+            <div className="flex gap-2 mt-4 pt-4 border-t border-gray-700">
+              <button
+                onClick={() => {
+                  setShowModal(null);
+                  setSelectedNews(null);
+                }}
+                className="flex-1 px-4 py-3 bg-gray-700 hover:bg-gray-600 rounded-lg text-white"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={() => selectedNews && generateFromSelectedNews(selectedNews)}
+                disabled={!selectedNews || generating}
+                className="flex-1 px-4 py-3 bg-red-600 hover:bg-red-500 disabled:bg-gray-600 disabled:cursor-not-allowed rounded-lg text-white font-bold flex items-center justify-center gap-2"
+              >
+                {generating ? (
+                  <>
+                    <RefreshCw className="w-5 h-5 animate-spin" />
+                    Gerando...
+                  </>
+                ) : (
+                  <>
+                    <Sparkles className="w-5 h-5" />
+                    Gerar Post desta Notícia
+                  </>
+                )}
               </button>
             </div>
           </div>

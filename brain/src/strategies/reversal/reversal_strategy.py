@@ -116,6 +116,82 @@ class ReversalStrategy:
         self.config = config or ReversalConfig()
         self.logger = VirtusLogger.get_logger("reversal_strategy")
     
+    async def find_setups(
+        self,
+        market_data: Dict[str, Any],
+        analysis: Dict[str, Any]
+    ) -> List[Dict[str, Any]]:
+        """
+        Interface para TradingEngine - encontra setups de reversão.
+        
+        Args:
+            market_data: Dados de mercado
+            analysis: Análise técnica completa
+            
+        Returns:
+            Lista de setups encontrados
+        """
+        setups = []
+        
+        try:
+            # Extrai dados
+            symbol = market_data.get('symbol', '')
+            tick = analysis.get('tick', {})
+            current_price = tick.get('bid') or tick.get('last') or analysis.get('price', 0)
+            
+            if not current_price:
+                return setups
+            
+            # Indicadores
+            indicators = analysis.get('indicators', {})
+            volatility = analysis.get('volatility', {})
+            atr = volatility.get('atr', 0) or indicators.get('atr', 0)
+            
+            # RSI para divergências simples
+            rsi = indicators.get('rsi', 50)
+            
+            # Bollinger para extremos
+            bb = indicators.get('bollinger', {})
+            bb_lower = bb.get('lower', 0)
+            bb_upper = bb.get('upper', 0)
+            
+            # Reversão simples: RSI extremo + preço em banda
+            if rsi and bb_lower and bb_upper:
+                # Oversold extremo
+                if rsi < 25 and current_price <= bb_lower:
+                    sl_distance = atr * 2 if atr else current_price * 0.005
+                    tp_distance = atr * 5 if atr else current_price * 0.012
+                    
+                    setups.append({
+                        'name': 'reversal_oversold_extreme',
+                        'direction': 'buy',
+                        'entry': current_price,
+                        'sl': current_price - sl_distance,
+                        'tp': current_price + tp_distance,
+                        'score': 0.7,
+                        'risk_reward': tp_distance / sl_distance if sl_distance else 2.5,
+                    })
+                    
+                # Overbought extremo
+                elif rsi > 75 and current_price >= bb_upper:
+                    sl_distance = atr * 2 if atr else current_price * 0.005
+                    tp_distance = atr * 5 if atr else current_price * 0.012
+                    
+                    setups.append({
+                        'name': 'reversal_overbought_extreme',
+                        'direction': 'sell',
+                        'entry': current_price,
+                        'sl': current_price + sl_distance,
+                        'tp': current_price - tp_distance,
+                        'score': 0.7,
+                        'risk_reward': tp_distance / sl_distance if sl_distance else 2.5,
+                    })
+                    
+        except Exception as e:
+            self.logger.error(f"Erro em find_setups: {e}")
+        
+        return setups
+    
     async def evaluate(
         self,
         symbol: str,

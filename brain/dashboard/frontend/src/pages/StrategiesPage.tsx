@@ -39,10 +39,12 @@ export default function StrategiesPage() {
         strategiesAPI.list(),
         symbolsAPI.list(),
       ])
-      setStrategies(stratRes.data.strategies)
-      setSymbols(symRes.data.symbols)
+      setStrategies(stratRes.data?.strategies || [])
+      setSymbols(symRes.data?.symbols || [])
     } catch (error) {
       console.error('Failed to load data:', error)
+      setStrategies([])
+      setSymbols([])
     } finally {
       setIsLoading(false)
     }

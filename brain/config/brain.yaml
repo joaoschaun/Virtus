@@ -23,6 +23,11 @@ cache:
     macro: 3600            # 1 hora
     forex_rates: 60        # 1 minuto
     technical: 300         # 5 minutos
+    eodhd_eod: 3600        # 1 hora (dados EOD)
+    eodhd_intraday: 300    # 5 minutos (dados intraday)
+    eodhd_live: 60         # 1 minuto (preços live)
+    eodhd_fundamentals: 86400  # 24 horas
+    eodhd_news: 900        # 15 minutos
   
   # Persistência
   persist_to_disk: true
@@ -47,6 +52,12 @@ budget:
       daily_limit: 166      # 5000/30
       min_interval_ms: 1000 # 1 segundo entre chamadas
       priority: 1           # Maior prioridade
+      
+    eodhd:
+      monthly_limit: 100000  # Free tier: Unlimited API calls
+      daily_limit: 10000     # Rate limit: 100,000/day
+      min_interval_ms: 500   # 0.5 segundo entre chamadas
+      priority: 1            # Alta prioridade (dados completos)
       
     finnhub:
       monthly_limit: 30000  # 60 calls/min free tier
@@ -78,18 +89,18 @@ budget:
 providers:
   # Notícias
   news:
-    primary: "forexnews"
-    fallback: ["finnhub"]
+    primary: "eodhd"
+    fallback: ["forexnews", "finnhub"]
     
   # Calendário Econômico
   calendar:
-    primary: "finnhub"
-    fallback: ["financialmodelingprep"]
+    primary: "eodhd"
+    fallback: ["finnhub", "financialmodelingprep"]
     
   # Sentimento
   sentiment:
-    primary: "forexnews"
-    fallback: ["finnhub"]
+    primary: "eodhd"
+    fallback: ["forexnews", "finnhub"]
     
   # COT (Commitment of Traders)
   cot:
@@ -98,13 +109,152 @@ providers:
     
   # Forex Rates
   forex_rates:
-    primary: "twelvedata"
-    fallback: ["finnhub", "finazon"]
+    primary: "eodhd"
+    fallback: ["twelvedata", "finnhub", "finazon"]
     
   # Indicadores Técnicos
   technical:
-    primary: "twelvedata"
+    primary: "eodhd"
+    fallback: ["twelvedata", "financialmodelingprep"]
+  
+  # Dados Históricos EOD
+  eod_data:
+    primary: "eodhd"
+    fallback: ["twelvedata"]
+  
+  # Dados Fundamentais
+  fundamentals:
+    primary: "eodhd"
     fallback: ["financialmodelingprep"]
+  
+  # Dados Macro
+  macro:
+    primary: "eodhd"
+    fallback: []
+
+# ============================================================================
+# EODHD API - Financial Data Provider
+# https://eodhd.com/financial-apis/
+# ============================================================================
+eodhd:
+  api_key: "${EODHD_API_KEY}"  # Ou configurar diretamente
+  base_url: "https://eodhd.com/api"
+  
+  # Endpoints principais
+  endpoints:
+    # Market Data
+    eod: "/eod/{symbol}"
+    intraday: "/intraday/{symbol}"
+    real_time: "/real-time/{symbol}"
+    options: "/options/{symbol}"
+    
+    # Historical
+    dividends: "/div/{symbol}"
+    splits: "/splits/{symbol}"
+    
+    # Fundamental
+    fundamentals: "/fundamentals/{symbol}"
+    bulk_fundamentals: "/bulk-fundamentals/{exchange}"
+    
+    # Exchanges
+    exchanges: "/exchanges-list/"
+    symbols: "/exchange-symbol-list/{exchange}"
+    search: "/search/{query}"
+    
+    # Calendar
+    earnings: "/calendar/earnings"
+    ipos: "/calendar/ipos"
+    economic_events: "/economic-events"
+    
+    # News & Sentiment
+    news: "/news"
+    sentiment: "/sentiments"
+    
+    # Technical
+    technical: "/technical/{symbol}"
+    
+    # Macro
+    macro: "/macro-indicator/{country}"
+  
+  # Exchanges suportadas
+  exchanges:
+    stocks:
+      - "US"       # USA
+      - "LSE"      # London
+      - "XETRA"    # Germany
+      - "PA"       # Paris
+      - "SA"       # Brazil (B3)
+      - "TSE"      # Tokyo
+    forex: "FOREX"
+    crypto: "CC"
+    indices: "INDX"
+    commodities: "COMM"
+  
+  # Intervalos para intraday
+  intervals:
+    - "1m"
+    - "5m"
+    - "1h"
+  
+  # Indicadores técnicos disponíveis
+  technical_indicators:
+    - "sma"
+    - "ema"
+    - "wma"
+    - "rsi"
+    - "macd"
+    - "bbands"
+    - "stoch"
+    - "atr"
+    - "adx"
+    - "cci"
+    - "obv"
+    - "sar"
+    - "williams"
+  
+  # Mapeamento de símbolos Virtus -> EODHD
+  symbol_mapping:
+    # Forex
+    XAUUSD: "XAUUSD.FOREX"
+    EURUSD: "EURUSD.FOREX"
+    GBPUSD: "GBPUSD.FOREX"
+    USDJPY: "USDJPY.FOREX"
+    AUDUSD: "AUDUSD.FOREX"
+    USDCAD: "USDCAD.FOREX"
+    USDCHF: "USDCHF.FOREX"
+    NZDUSD: "NZDUSD.FOREX"
+    
+    # Crypto
+    BTCUSD: "BTC-USD.CC"
+    ETHUSD: "ETH-USD.CC"
+    
+    # Índices
+    SPX: "GSPC.INDX"
+    DJI: "DJI.INDX"
+    NASDAQ: "IXIC.INDX"
+    VIX: "VIX.INDX"
+    DXY: "DX-Y.NYB"
+  
+  # Países para dados macro
+  macro_countries:
+    - "USA"
+    - "BRA"
+    - "GBR"
+    - "DEU"
+    - "JPN"
+    - "CHN"
+    - "EUR"
+  
+  # Indicadores macro disponíveis
+  macro_indicators:
+    - "gdp_growth_annual"
+    - "inflation_consumer_prices_annual"
+    - "real_interest_rate"
+    - "unemployment_rate"
+    - "current_account_balance"
+    - "government_debt_to_gdp"
+    - "population_total"
+    - "gdp_current_usd"
 
 # ============================================================================
 # FOREXNEWS API

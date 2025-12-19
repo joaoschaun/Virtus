@@ -162,6 +162,26 @@ class EventStrategy:
         # Cache de eventos processados
         self._processed_events: Dict[str, datetime] = {}
     
+    async def find_setups(
+        self,
+        market_data: Dict[str, Any],
+        analysis: Dict[str, Any]
+    ) -> List[Dict[str, Any]]:
+        """
+        Interface para TradingEngine - encontra setups baseados em eventos.
+        
+        Args:
+            market_data: Dados de mercado
+            analysis: Análise técnica completa
+            
+        Returns:
+            Lista de setups encontrados
+        """
+        # EventStrategy geralmente precisa de dados específicos de eventos
+        # Por enquanto, retorna lista vazia se não houver eventos
+        # Os eventos seriam integrados via Brain service
+        return []
+    
     async def evaluate(
         self,
         symbol: str,

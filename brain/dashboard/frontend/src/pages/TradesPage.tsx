@@ -84,10 +84,16 @@ export default function TradesPage() {
       if (filters.endDate) params.end_date = filters.endDate
       
       const response = await tradesAPI.list(params)
-      setTrades(response.data.trades)
-      setPagination(response.data.pagination)
+      setTrades(response.data?.trades || [])
+      setPagination(response.data?.pagination || {
+        page: 1,
+        per_page: 50,
+        total: 0,
+        pages: 0,
+      })
     } catch (error) {
       console.error('Failed to load trades:', error)
+      setTrades([])
     } finally {
       setIsLoading(false)
     }
@@ -96,7 +102,7 @@ export default function TradesPage() {
   const loadStats = async () => {
     try {
       const response = await tradesAPI.getStats(30)
-      setStats(response.data)
+      setStats(response.data || null)
     } catch (error) {
       console.error('Failed to load stats:', error)
     }

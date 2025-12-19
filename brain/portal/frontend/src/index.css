@@ -1,0 +1,131 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --virtus-bg-primary: #0c0c10;
+  --virtus-bg-secondary: #121216;
+  --virtus-bg-card: #16161b;
+  --virtus-border: #2a2a32;
+  --virtus-accent: #E53935;
+  --virtus-accent-light: #FF5252;
+  --virtus-success: #10b981;
+  --virtus-danger: #ef4444;
+}
+
+body {
+  margin: 0;
+  font-family: 'Inter', system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  background-color: var(--virtus-bg-primary);
+  color: #f1f5f9;
+}
+
+/* Scrollbar customization */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--virtus-bg-secondary);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--virtus-border);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--virtus-accent);
+}
+
+/* Ticker animation */
+.ticker-wrapper {
+  overflow: hidden;
+}
+
+.ticker-content {
+  display: flex;
+  animation: ticker 40s linear infinite;
+}
+
+.ticker-content:hover {
+  animation-play-state: paused;
+}
+
+@keyframes ticker {
+  0% {
+    transform: translateX(0);
+  }
+  100% {
+    transform: translateX(-50%);
+  }
+}
+
+/* Card styles */
+.card {
+  background: var(--virtus-bg-card);
+  border: 1px solid var(--virtus-border);
+  border-radius: 12px;
+  transition: all 0.3s ease;
+}
+
+.card:hover {
+  border-color: rgba(229, 57, 53, 0.3);
+  box-shadow: 0 10px 40px rgba(229, 57, 53, 0.1);
+}
+
+.card-hover {
+  transition: all 0.3s ease;
+}
+
+.card-hover:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 10px 40px rgba(229, 57, 53, 0.15);
+}
+
+/* News card */
+.news-card {
+  background: linear-gradient(135deg, #16161b 0%, #121216 100%);
+  border: 1px solid rgba(229, 57, 53, 0.1);
+}
+
+.news-card:hover {
+  border-color: rgba(229, 57, 53, 0.3);
+}
+
+/* Red gradient text */
+.text-gradient-red {
+  background: linear-gradient(135deg, #FF5252 0%, #E53935 50%, #C62828 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* Pulse animation for live indicator */
+.pulse-live {
+  animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
+
+/* Button styles */
+.btn-primary {
+  background: linear-gradient(135deg, #E53935 0%, #FF5252 100%);
+  color: white;
+  transition: all 0.3s ease;
+}
+
+.btn-primary:hover {
+  box-shadow: 0 0 20px rgba(229, 57, 53, 0.4);
+  opacity: 0.9;
+}

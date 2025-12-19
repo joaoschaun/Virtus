@@ -7,12 +7,13 @@ Execute este script e siga as instruções!
 import asyncio
 import aiohttp
 import json
+import os
 import webbrowser
 from pathlib import Path
 
-# SUAS CREDENCIAIS
-APP_ID = "783040488084825"
-APP_SECRET = "c324a0bb726be9a154ea65a7b1c2bd57"
+# CREDENCIAIS DO INSTAGRAM - configurar via variáveis de ambiente
+APP_ID = os.getenv("INSTAGRAM_APP_ID", "")
+APP_SECRET = os.getenv("INSTAGRAM_APP_SECRET", "")
 
 BASE_URL = "https://graph.facebook.com/v18.0"
 
