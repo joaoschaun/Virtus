@@ -28,6 +28,13 @@ import MarketOverviewPage from './pages/MarketOverviewPage'
 // Screener e Carteira FIIs
 import ScreenerPage from './pages/ScreenerPage'
 import FIIPortfolioPage from './pages/FIIPortfolioPage'
+// MT5 Conta Real
+import MT5AccountPage from './pages/MT5AccountPage'
+// MT4 Conta Real
+import MT4AccountPage from './pages/MT4AccountPage'
+// Patrimônio e Carteira
+import PatrimonioPage from './pages/PatrimonioPage'
+import CarteiraPage from './pages/CarteiraPage'
 
 // Query Client com configurações otimizadas
 const queryClient = new QueryClient({
@@ -112,6 +119,13 @@ function App() {
             {/* Screener e Carteira */}
             <Route path="screener" element={<ScreenerPage />} />
             <Route path="fii-portfolio" element={<FIIPortfolioPage />} />
+            {/* MT5 Conta Real */}
+            <Route path="mt5-account" element={<MT5AccountPage />} />
+            {/* MT4 Conta Real */}
+            <Route path="mt4-account" element={<MT4AccountPage />} />
+            {/* Patrimônio e Carteira */}
+            <Route path="patrimonio" element={<PatrimonioPage />} />
+            <Route path="carteira" element={<CarteiraPage />} />
             <Route path="settings" element={<SettingsPage />} />
           </Route>
           

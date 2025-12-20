@@ -863,6 +863,38 @@ try:
 except ImportError as e:
     print(f"Warning: FII Portfolio routes not available: {e}")
 
+# MT5 Account - Integração com conta real
+try:
+    from routes.mt5_account_routes import router as mt5_account_router
+    app.include_router(mt5_account_router)
+    print("✅ MT5 Account routes loaded - Conta Real MT5 disponível")
+except ImportError as e:
+    print(f"Warning: MT5 Account routes not available: {e}")
+
+# MT4 Account - Integração com conta real MetaTrader 4
+try:
+    from routes.mt4_account_routes import router as mt4_account_router
+    app.include_router(mt4_account_router)
+    print("✅ MT4 Account routes loaded - Conta Real MT4 disponível")
+except ImportError as e:
+    print(f"Warning: MT4 Account routes not available: {e}")
+
+# Patrimônio - Gestão patrimonial consolidada
+try:
+    from routes.patrimonio_routes import router as patrimonio_router
+    app.include_router(patrimonio_router)
+    print("✅ Patrimônio routes loaded - Gestão Patrimonial disponível")
+except ImportError as e:
+    print(f"Warning: Patrimônio routes not available: {e}")
+
+# Carteira - Gestão de Ações e FIIs
+try:
+    from routes.carteira_routes import router as carteira_router
+    app.include_router(carteira_router)
+    print("✅ Carteira routes loaded - Carteira de Investimentos disponível")
+except ImportError as e:
+    print(f"Warning: Carteira routes not available: {e}")
+
 # CORS
 app.add_middleware(
     CORSMiddleware,

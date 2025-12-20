@@ -69,6 +69,13 @@ const navigationGroups = [
     ]
   },
   {
+    name: 'Patrimônio',
+    items: [
+      { name: 'Desenvolvimento', href: '/patrimonio', icon: TrendingUp },
+      { name: 'Carteira', href: '/carteira', icon: Briefcase },
+    ]
+  },
+  {
     name: 'Dividendos',
     items: [
       { name: 'Dividendos B3', href: '/dividends', icon: DollarSign },
@@ -87,6 +94,7 @@ const navigationGroups = [
     items: [
       { name: 'Posições', href: '/positions', icon: ListOrdered },
       { name: 'Histórico', href: '/trades', icon: LineChart },
+      { name: 'MT4 Conta Real', href: '/mt4-account', icon: Wallet },
       { name: 'Bots', href: '/bots', icon: Bot },
       { name: 'Estratégias', href: '/strategies', icon: Zap },
       { name: 'Análise', href: '/analysis', icon: BarChart3 },
